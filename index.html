@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kcal & Protein Tracker</title>
+    <style>
+        :root {
+            --bg: #12181b;
+            --card: #1a2328;
+            --accent: #2ae8b3;
+            --text: #ffffff;
+            --mute: #8a99a6;
+            --border: #2a373f;
+        }
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 16px;
+            padding-bottom: 90px;
+            display: flex;
+            justify-content: center;
+        }
+        main {
+            width: 100%;
+            max-width: 480px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .hidden { display: none !important; }
+        h1, h2, h3 { margin: 0 0 10px 0; }
+        .sub-text { color: var(--mute); font-size: 14px; margin-bottom: 16px; }
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin-bottom: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #0f1417;
+            color: #fff;
+            box-sizing: border-box;
+        }
+        .btn {
+            width: 100%;
+            padding: 12px;
+            border: none;
+            border-radius: 10px;
+            background: var(--accent);
+            color: #000;
+            font-weight: 600;
+            font-size: 15px;
+            cursor: pointer;
+        }
+        .btn-sec { background: transparent; border: 1px solid var(--accent); color: var(--accent); margin-top: 8px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .stat-box { background: #0f1417; padding: 12px; border-radius: 8px; text-align: center; }
+        .stat-val { font-size: 22px; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 12px; color: var(--mute); }
+        .chat-footer {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: var(--card);
+            padding: 12px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: center;
+            z-index: 100;
+        }
+        .chat-container { width: 100%; max-width: 480px; display: flex; gap: 8px; align-items: center; }
+        .entry-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+    </style>
+</head>
+<body>
+
+<main>
+    <!-- Auth Section / Login Card -->
+    <div id="auth-card" class="card">
+        <h2>Willkommen zurück</h2>
+        <p class="sub-text">Melde dich mit Supabase an.</p>
+        <input type="email" id="email-input" placeholder="E-Mail Adresse">
+        <input type="password" id="password-input" placeholder="Passwort">
+        <button class="btn" id="login-btn">Anmelden / Registrieren</button>
+    </div>
+
+    <!-- Dashboard Content -->
+    <div id="dashboard" class="card hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>Dashboard</h1>
+            <button id="logout-btn" style="background: none; border: none; color: var(--mute); cursor: pointer;">Abmelden</button>
+        </div>
+        <p class="sub-text" id="user-greeting">Hallo!</p>
+
+        <div class="grid-2" style="margin-bottom: 16px;">
+            <div class="stat-box">
+                <div class="stat-val" id="kcal-current">0</div>
+                <div class="stat-label">/ <span id="kcal-goal-display">2500</span> kcal</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-val" id="protein-current">0</div>
+                <div class="stat-label">g Protein</div>
+            </div>
+        </div>
+
+        <!-- Ziele -->
+        <div class="card" style="background: #0f1417;">
+            <h3>Ziele & Werte</h3>
+            <div class="grid-2">
+                <div>
+                    <label class="stat-label">Ziel-Kalorien</label>
+                    <input type="number" id="goal-kcal-input" value="2500">
+                </div>
+                <div>
+                    <label class="stat-label">Gewicht (kg)</label>
+                    <input type="number" id="weight-input" step="0.1" placeholder="80.0">
+                </div>
+            </div>
+            <button class="btn btn-sec" id="save-goals-btn">Ziele speichern</button>
+        </div>
+
+        <!-- Einträge -->
+        <div class="card" style="margin-top: 16px;">
+            <h3>Heute eingetragen</h3>
+            <div id="entries-list">
+                <p class="sub-text">Keine Einträge vorhanden.</p>
+            </div>
+        </div>
+    </div>
+</main>
+
+<!-- Chat / Eingabe Footer Bar -->
+<div class="chat-footer hidden" id="chat-footer">
+    <div class="chat-container">
+        <label for="image-input" class="btn" style="width: auto; padding: 10px 14px; cursor: pointer;" title="Foto hochladen">📷</label>
+        <input type="file" id="image-input" accept="image/*" class="hidden">
+        <input type="text" id="food-input" placeholder="Was hast du gegessen? (z.B. 2 Bananen)" style="margin-bottom: 0;">
+        <button class="btn" id="send-btn" style="width: auto; padding: 10px 16px;">Senden</button>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+    const SUPABASE_URL = 'https://tzqzgcnacpkzdyvahioo.supabase.co';
+    const SUPABASE_ANON_KEY = 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+    const authCard = document.getElementById('auth-card');
+    const dashboard = document.getElementById('dashboard');
+    const chatFooter = document.getElementById('chat-footer');
+    const loginBtn = document.getElementById('login-btn');
+    const logoutBtn = document.getElementById('logout-btn');
+    const userGreeting = document.getElementById('user-greeting');
+    const sendBtn = document.getElementById('send-btn');
+    const foodInput = document.getElementById('food-input');
+    const imageInput = document.getElementById('image-input');
+    const entriesList = document.getElementById('entries-list');
+    const kcalCurrent = document.getElementById('kcal-current');
+    const proteinCurrent = document.getElementById('protein-current');
+    const kcalGoalDisplay = document.getElementById('kcal-goal-display');
+    const goalKcalInput = document.getElementById('goal-kcal-input');
+
+    let currentSession = null;
+    let localEntries = [];
+
+    async function checkSession() {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+            currentSession = session;
+            showApp();
+        }
+    }
+    checkSession();
+
+    function showApp() {
+        authCard.classList.add('hidden');
+        dashboard.classList.remove('hidden');
+        chatFooter.classList.remove('hidden');
+        userGreeting.innerText = `Hallo ${currentSession.user.email}!`;
+        loadEntries();
+    }
+
+    loginBtn.addEventListener('click', async () => {
+        const email = document.getElementById('email-input').value.trim();
+        const password = document.getElementById('password-input').value.trim();
+
+        if (!email || !password) {
+            alert('Bitte E-Mail und Passwort eingeben.');
+            return;
+        }
+
+        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        if (error) {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
+            if (signUpError) {
+                alert('Fehler: ' + signUpError.message);
+            } else {
+                alert('Account erstellt und eingeloggt!');
+                if (signUpData.session) {
+                    currentSession = signUpData.session;
+                    showApp();
+                }
+            }
+        } else {
+            currentSession = data.session;
+            showApp();
+        }
+    });
+
+    logoutBtn.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        dashboard.classList.add('hidden');
+        chatFooter.classList.add('hidden');
+        authCard.classList.remove('hidden');
+    });
+
+    // Gemini Edge Function Aufruf
+    async function processWithGemini(payload) {
+        try {
+            const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (data.error) throw new Error(data.error);
+            return data.items || [];
+        } catch (err) {
+            alert('Fehler bei der KI-Analyse: ' + err.message);
+            return [];
+        }
+    }
+
+    sendBtn.addEventListener('click', async () => {
+        const text = foodInput.value.trim();
+        let imagePayload = null;
+
+        if (imageInput.files && imageInput.files[0]) {
+            const file = imageInput.files[0];
+            const base64 = await toBase64(file);
+            imagePayload = {
+                mime: file.type,
+                data: base64.split(',')[1]
+            };
+        }
+
+        if (!text && !imagePayload) return;
+
+        sendBtn.innerText = 'Analysiere...';
+        const items = await processWithGemini({ text, image: imagePayload });
+        sendBtn.innerText = 'Senden';
+
+        if (items.length > 0) {
+            items.forEach(item => {
+                localEntries.push(item);
+            });
+            foodInput.value = '';
+            imageInput.value = '';
+            renderEntries();
+        }
+    });
+
+    function toBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    function renderEntries() {
+        if (localEntries.length === 0) {
+            entriesList.innerHTML = '<p class="sub-text">Keine Einträge vorhanden.</p>';
+            kcalCurrent.innerText = '0';
+            proteinCurrent.innerText = '0';
+            return;
+        }
+
+        let totalKcal = 0;
+        let totalProtein = 0;
+        let html = '';
+
+        localEntries.forEach((entry, index) => {
+            totalKcal += Number(entry.kcal || 0);
+            totalProtein += Number(entry.protein_g || 0);
+            html += `
+                <div class="entry-item">
+                    <span><b>${entry.name}</b> (${entry.amount})</span>
+                    <span>${entry.kcal} kcal | ${entry.protein_g}g P</span>
+                </div>
+            `;
+        });
+
+        entriesList.innerHTML = html;
+        kcalCurrent.innerText = totalKcal;
+        proteinCurrent.innerText = totalProtein;
+    }
+
+    function loadEntries() {
+        renderEntries();
+    }
+</script>
+
+</body>
+</html>
