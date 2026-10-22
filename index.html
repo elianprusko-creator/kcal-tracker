@@ -189,32 +189,44 @@
         loadEntries();
     }
 
-    loginBtn.addEventListener('click', async () => {
-        const email = document.getElementById('email-input').value.trim();
-        const password = document.getElementById('password-input').value.trim();
+    
+loginBtn.addEventListener('click', async () => {
+    const email = document.getElementById('email-input').value.trim();
+    const password = document.getElementById('password-input').value;
 
-        if (!email || !password) {
-            alert('Bitte E-Mail und Passwort eingeben.');
+    if (!email || !password) {
+        alert('Bitte E-Mail und Passwort eingeben.');
+        return;
+    }
+
+    loginBtn.disabled = true;
+
+    try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+            email,
+            password
+        });
+
+        if (error) {
+            alert('Anmeldung fehlgeschlagen: ' + error.message);
             return;
         }
 
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-        if (error) {
-            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
-            if (signUpError) {
-                alert('Fehler: ' + signUpError.message);
-            } else {
-                alert('Account erstellt und eingeloggt!');
-                if (signUpData.session) {
-                    currentSession = signUpData.session;
-                    showApp();
-                }
-            }
-        } else {
-            currentSession = data.session;
-            showApp();
+        if (!data.session) {
+            alert('Keine Sitzung erhalten. Bitte versuche es erneut.');
+            return;
         }
-    });
+
+        currentSession = data.session;
+        showApp();
+
+    } catch (err) {
+        alert('Unerwarteter Fehler: ' + err.message);
+    } finally {
+        loginBtn.disabled = false;
+    }
+});
+
 
     logoutBtn.addEventListener('click', async () => {
         await supabase.auth.signOut();
