@@ -1,6 +1,19 @@
 // Erkennt einfache Eingaben wie "2 Bananen", "250g Skyr", "1 Scheibe Brot" ohne KI
-// und berechnet die Nährwerte aus der Tabelle (foods.ts).
-import { type Food, FOODS } from "./foods.ts";
+// und berechnet die Nährwerte aus der Tabelle "foods" in der Datenbank.
+
+// Werte pro 100 g (bzw. 100 ml)
+export type Food = {
+  name: string;
+  alias?: string[];
+  kcal: number;
+  p: number;
+  c: number;
+  f: number;
+  piece?: number;
+  portion: number;
+  units?: Record<string, number>;
+  note?: string;
+};
 
 export type Item = {
   name: string;
@@ -19,9 +32,13 @@ export type Item = {
 const r1 = (n: number) => Math.round(n * 10) / 10;
 
 // Name/Alias -> Lebensmittel
-const INDEX = new Map<string, Food>();
-for (const food of FOODS) {
-  for (const n of [food.name, ...(food.alias || [])]) INDEX.set(n.toLowerCase(), food);
+let INDEX = new Map<string, Food>();
+
+export function setFoods(foods: Food[]) {
+  INDEX = new Map();
+  for (const food of foods) {
+    for (const n of [food.name, ...(food.alias || [])]) INDEX.set(n.toLowerCase(), food);
+  }
 }
 
 export function findFood(name?: string | null): Food | null {

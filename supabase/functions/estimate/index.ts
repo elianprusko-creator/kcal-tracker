@@ -1,11 +1,45 @@
 // Supabase Edge Function "estimate": Nährwerte schätzen.
 // Reihenfolge, um KI-Aufrufe zu sparen:
-//   1. Einfache Eingaben ("2 Bananen, 250 g Skyr") direkt aus der Tabelle (foods.ts), ohne KI –
+//   1. Einfache Eingaben ("2 Bananen, 250 g Skyr") direkt aus der Tabelle "foods" (Datenbank), ohne KI –
 //      aber nur, wenn die Tabelle JEDEN Teil versteht (sonst geht der Zusammenhang verloren)
 //   2. Sonst: Gemini zerlegt die ganze Eingabe (ein Aufruf ohne Suche), bekannte Lebensmittel trotzdem aus der Tabelle
 //   3. Markenprodukte: Open Food Facts
 //   4. Nur was dann noch unsicher ist: Gemini mit Google-Suche (ein gemeinsamer Aufruf)
-import { findFood, fromTable, type Item, parseLocal, splitInput } from "./parse.ts";
+import { findFood, type Food, fromTable, type Item, parseLocal, setFoods, splitInput } from "./parse.ts";
+
+// Tabelle "foods" aus der Datenbank laden, 10 Minuten zwischenspeichern
+let foodsLoadedAt = 0;
+
+async function loadFoods(apikey: string, authorization: string) {
+  if (Date.now() - foodsLoadedAt < 10 * 60 * 1000) return;
+  try {
+    const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/foods?select=*`, {
+      headers: { apikey, Authorization: authorization },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!r.ok) return;
+    type Row = {
+      name: string; alias: string[]; kcal: number; protein_g: number; carbs_g: number; fat_g: number;
+      piece_g: number | null; portion_g: number; units: Record<string, number>; note: string | null;
+    };
+    const rows: Row[] = await r.json();
+    setFoods(rows.map((row): Food => ({
+      name: row.name,
+      alias: row.alias,
+      kcal: Number(row.kcal),
+      p: Number(row.protein_g),
+      c: Number(row.carbs_g),
+      f: Number(row.fat_g),
+      piece: row.piece_g ? Number(row.piece_g) : undefined,
+      portion: Number(row.portion_g),
+      units: row.units,
+      note: row.note || undefined,
+    })));
+    foodsLoadedAt = Date.now();
+  } catch {
+    // Tabelle nicht erreichbar -> alles geht an die KI
+  }
+}
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -226,6 +260,7 @@ Deno.serve(async (req) => {
       headers: { apikey, Authorization: req.headers.get("Authorization") || "" },
     });
     if (!auth.ok) return out({ error: "Nicht angemeldet." }, 401);
+    await loadFoods(apikey, req.headers.get("Authorization") || "");
 
     const { text, image } = await req.json();
     if (!text && !image) return out({ error: "Leere Eingabe." });

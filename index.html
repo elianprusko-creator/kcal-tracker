@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Kcal & Protein Tracker</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="theme-color" content="#12181b">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Kcal">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
         :root {
             color-scheme: light;
@@ -178,6 +185,34 @@
         #status-card.error .spinner { display: none; }
         #status-card.error #status-text { color: var(--danger); }
 
+        /* Vorschläge beim Tippen */
+        .suggest { border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 8px; background: var(--card); }
+        .suggest-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; cursor: pointer; border-bottom: 1px solid var(--border); }
+        .suggest-item:last-child { border-bottom: none; }
+        .suggest-item:hover, .suggest-item.active { background: var(--field); }
+        .suggest-name { font-weight: 600; font-size: 14px; overflow-wrap: anywhere; }
+        .suggest-meta { font-size: 12px; color: var(--mute); margin-top: 2px; }
+        .suggest-kcal { font-size: 13px; font-weight: 600; white-space: nowrap; }
+
+        /* Mengen-Schnellwahl */
+        .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+        .chip { border: 1px solid var(--border); background: var(--field); color: var(--text); border-radius: 16px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+        .chip.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+        /* Gerichte */
+        .meal-save { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+        .meal-save input { margin: 0; padding: 8px; font-size: 15px; }
+        details.card > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; }
+        details.card > summary::-webkit-details-marker { display: none; }
+        details.card > summary h3 { margin: 0; }
+        details.card > summary::after { content: '▾'; color: var(--mute); }
+        details.card[open] > summary::after { content: '▴'; }
+        .badge.meal { color: var(--accent); }
+
+        /* Barcode */
+        #scan-reader { border-radius: 10px; overflow: hidden; margin-bottom: 8px; }
+        #scan-reader video { width: 100% !important; border-radius: 10px; }
+
         /* Onboarding */
         .result-box { background: var(--field); border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 14px; }
         .result-line { display: flex; justify-content: space-between; padding: 3px 0; }
@@ -210,7 +245,8 @@
         }
         .chat-container { width: 100%; max-width: 480px; display: flex; gap: 8px; align-items: center; }
         .chat-container input[type="text"] { margin-bottom: 0; flex: 1; min-width: 0; }
-        .photo-btn { width: auto; padding: 10px 12px; flex-shrink: 0; }
+        .chat-inner { width: 100%; max-width: 480px; }
+        .photo-btn { width: auto; padding: 10px 12px; flex-shrink: 0; display: flex; align-items: center; }
         .photo-btn.has-file { background: var(--warn); }
         .send-btn { width: auto; padding: 12px 16px; flex-shrink: 0; }
     </style>
@@ -321,6 +357,22 @@
             </div>
         </div>
 
+        <!-- Barcode-Scanner -->
+        <div class="card hidden" id="scan-card">
+            <div class="card-head">
+                <h3>Barcode scannen</h3>
+                <button class="icon-btn" id="scan-close-btn" title="Schließen">✕</button>
+            </div>
+            <div id="scan-reader"></div>
+            <p class="preview-note" id="scan-hint" style="margin: 0 0 10px;">Kamera wird gestartet …</p>
+            <label class="btn btn-sec" for="scan-file" style="display: block; text-align: center; box-sizing: border-box;">Foto vom Barcode aufnehmen</label>
+            <input type="file" id="scan-file" accept="image/*" capture="environment" class="hidden">
+            <div class="row" style="margin-top: 8px;">
+                <input type="text" id="scan-code" inputmode="numeric" placeholder="oder Nummer eintippen" style="margin: 0;">
+                <button class="btn btn-small" id="scan-code-btn" style="flex: 0 0 auto;">Suchen</button>
+            </div>
+        </div>
+
         <!-- Status der Analyse (Laden / Fehler) -->
         <div class="card hidden" id="status-card">
             <div class="status-row">
@@ -339,6 +391,13 @@
             <p class="sub-text" style="margin-bottom: 4px;">Werte bei Bedarf anpassen, dann speichern. <span id="preview-meta"></span></p>
             <div id="preview-list"></div>
             <div class="sources" id="preview-sources"></div>
+            <div class="meal-save hidden" id="meal-save">
+                <label for="meal-name">Als Gericht merken – nächstes Mal reicht der Name</label>
+                <div class="row">
+                    <input type="text" id="meal-name" placeholder="z. B. Thai Curry">
+                    <button class="btn btn-sec btn-small" id="meal-save-btn" style="flex: 0 0 auto;">Merken</button>
+                </div>
+            </div>
             <div class="row" style="margin-top: 12px;">
                 <button class="btn btn-sec" id="preview-cancel-btn">Verwerfen</button>
                 <button class="btn" id="preview-save-btn">Speichern</button>
@@ -379,16 +438,31 @@
             <svg class="chart" id="week-chart" viewBox="0 0 320 150"></svg>
             <div class="chart-avg" id="week-avg"></div>
         </div>
+
+        <!-- Gemerkte Gerichte -->
+        <details class="card" id="meals-card">
+            <summary><h3>Meine Gerichte <span class="sub-text" id="meals-count"></span></h3></summary>
+            <div id="meals-list" style="margin-top: 8px;"></div>
+        </details>
     </div>
 </main>
 
 <!-- Chatleiste -->
 <div class="chat-footer hidden" id="chat-footer">
-    <div class="chat-container">
-        <label for="image-input" class="btn photo-btn" id="photo-btn" title="Foto hinzufügen">📷</label>
-        <input type="file" id="image-input" accept="image/*" class="hidden">
-        <input type="text" id="food-input" placeholder="Was hast du gegessen?" autocomplete="off" enterkeyhint="send">
-        <button class="btn send-btn" id="send-btn">Senden</button>
+    <div class="chat-inner">
+        <div class="suggest hidden" id="suggest-list"></div>
+        <div class="chat-container">
+            <label for="image-input" class="btn photo-btn" id="photo-btn" title="Foto hinzufügen">📷</label>
+            <input type="file" id="image-input" accept="image/*" class="hidden">
+            <button class="btn photo-btn" id="scan-btn" title="Barcode scannen" aria-label="Barcode scannen">
+                <svg width="20" height="18" viewBox="0 0 20 18" fill="currentColor" aria-hidden="true">
+                    <rect x="0" y="0" width="2" height="18"/><rect x="4" y="0" width="1" height="18"/><rect x="7" y="0" width="3" height="18"/>
+                    <rect x="12" y="0" width="1" height="18"/><rect x="15" y="0" width="2" height="18"/><rect x="19" y="0" width="1" height="18"/>
+                </svg>
+            </button>
+            <input type="text" id="food-input" placeholder="Was hast du gegessen?" autocomplete="off" enterkeyhint="send">
+            <button class="btn send-btn" id="send-btn">Senden</button>
+        </div>
     </div>
 </div>
 
@@ -410,14 +484,21 @@
     };
     const RING_LEN = 2 * Math.PI * 52;
     // Herkunft der Nährwerte (entries.source)
-    const SOURCE_LABEL = { tabelle: 'Tabelle', off: 'Open Food Facts', ki: 'KI-Schätzung', ki_suche: 'KI + Suche', ai: 'KI' };
+    const SOURCE_LABEL = { tabelle: 'Tabelle', off: 'Open Food Facts', ki: 'KI-Schätzung', ki_suche: 'KI + Suche', ai: 'KI', meal: 'Gericht' };
     const NUTRIENTS = ['kcal', 'protein_g', 'carbs_g', 'fat_g'];
+    const SCANNER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
 
     let currentSession = null;
     let profile = null;
     let currentDay = todayStr();
     let localEntries = [];
     let editingId = null;
+
+    // Daten für Vorschläge beim Tippen
+    let foodsList = [];          // Standardtabelle (Datenbank "foods")
+    let mealsList = [];          // gemerkte Gerichte
+    let historyMap = new Map();  // name (klein) -> { count, last: letzter Eintrag }
+    let suggestLoaded = false;
 
     // ---------- Hilfsfunktionen ----------
 
@@ -584,6 +665,11 @@
         currentSession = null;
         profile = null;
         localEntries = [];
+        foodsList = [];
+        mealsList = [];
+        historyMap = new Map();
+        suggestLoaded = false;
+        closeScanner();
         analyzeSeq++;
         hideStatus();
         hidePreview();
@@ -749,6 +835,34 @@
         $('app').classList.remove('hidden');
         $('chat-footer').classList.remove('hidden');
         loadDay();
+        if (!suggestLoaded) loadSuggestData();
+    }
+
+    async function loadSuggestData() {
+        suggestLoaded = true;
+        const [foods, meals, history] = await Promise.all([
+            supabase.from('foods').select('*').order('name'),
+            supabase.from('meals').select('*').order('created_at', { ascending: false }),
+            supabase.from('entries')
+                .select('name, amount, grams, kcal, protein_g, carbs_g, fat_g, source, created_at')
+                .eq('user_id', currentSession.user.id)
+                .order('created_at', { ascending: false })
+                .limit(1000)
+        ]);
+        foodsList = foods.data || [];
+        mealsList = meals.data || [];
+        historyMap = new Map();
+        // älteste zuerst, damit "last" am Ende der neueste Eintrag ist
+        (history.data || []).slice().reverse().forEach(addToHistory);
+        renderMeals();
+    }
+
+    function addToHistory(entry) {
+        const key = entry.name.trim().toLowerCase();
+        const h = historyMap.get(key) || { count: 0 };
+        h.count++;
+        h.last = entry;
+        historyMap.set(key, h);
     }
 
     $('prev-day-btn').addEventListener('click', () => changeDay(addDays(currentDay, -1)));
@@ -1021,11 +1135,11 @@
         return data;
     }
 
-    function showStatus(text, isError) {
+    function showStatus(text, isError, canRetry = isError) {
         $('status-card').classList.remove('hidden');
         $('status-card').classList.toggle('error', !!isError);
         $('status-text').innerText = text;
-        $('status-retry-btn').classList.toggle('hidden', !isError);
+        $('status-retry-btn').classList.toggle('hidden', !canRetry);
         $('status-cancel-btn').innerText = isError ? 'Schließen' : 'Abbrechen';
     }
 
@@ -1067,7 +1181,7 @@
             showStatus('Keine Lebensmittel erkannt. Formuliere es etwas genauer.', true);
         } else {
             hideStatus();
-            showPreview(result.items, result.sources || [], result);
+            showPreview(result.items, result.sources || [], { ...result, allowMeal: true, text: payload.text });
         }
     }
 
@@ -1101,11 +1215,13 @@
         }
 
         if (!text && !imagePayload) return;
+        hideSuggestions();
         analyze({ text, image: imagePayload });
     });
 
     $('food-input').addEventListener('keydown', (event) => {
-        if (event.key === 'Enter') {
+        // Enter sendet – außer ein Vorschlag ist per Pfeiltaste markiert (siehe Vorschläge)
+        if (event.key === 'Enter' && suggestIndex < 0) {
             event.preventDefault();
             $('send-btn').click();
         }
@@ -1121,6 +1237,7 @@
     }
 
     // Vorschau: nichts wird ohne Bestätigung gespeichert
+    // item.chips = Mengen-Schnellwahl [{ label, factor, amount }] relativ zu den Startwerten
     function showPreview(items, sources, info = {}) {
         const calls = info.ai_calls ?? null;
         $('preview-meta').innerText = calls === null ? '' :
@@ -1128,7 +1245,13 @@
             `${info.ms ? ', ' + (info.ms / 1000).toFixed(1).replace('.', ',') + ' s' : ''})`;
         $('preview-list').innerHTML = items.map(item => `
             <div class="preview-item" data-scale data-amount="${esc(item.amount)}" data-source="${esc(item.source || 'ki')}"
-                 data-grams="${esc(item.grams || '')}">
+                 data-grams="${esc(item.grams || '')}"
+                 data-init="${esc(JSON.stringify([Number(item.grams) || 0, ...NUTRIENTS.map(f => Number(item[f]) || 0)]))}">
+                ${item.chips && item.chips.length ? `
+                    <div class="chips">
+                        ${item.chips.map(c => `<button type="button" class="chip${c.factor === 1 ? ' active' : ''}"
+                            data-factor="${c.factor}" data-amount="${esc(c.amount)}">${esc(c.label)}</button>`).join('')}
+                    </div>` : ''}
                 <div class="preview-head">
                     <div><label>Name</label><input type="text" data-field="name" value="${esc(item.name)}" placeholder="Name"></div>
                     <div><label>Menge g/ml</label><input type="number" data-field="grams" inputmode="decimal" value="${esc(item.grams || '')}" placeholder="–"></div>
@@ -1153,6 +1276,11 @@
             .map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>`)
             .join('');
 
+        // "Als Gericht merken" nur bei berechneten Eingaben anbieten
+        $('meal-save').classList.toggle('hidden', !info.allowMeal);
+        const text = String(info.text || '');
+        $('meal-name').value = text.includes(':') ? text.split(':')[0].trim() : text.length <= 40 ? text : '';
+
         $('preview-card').classList.remove('hidden');
         $('preview-card').scrollIntoView({ behavior: 'smooth' });
     }
@@ -1165,15 +1293,30 @@
 
     $('preview-cancel-btn').addEventListener('click', hidePreview);
 
+    // Schnellwahl: Startwerte × Faktor
+    $('preview-list').addEventListener('click', (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        const el = chip.closest('.preview-item');
+        const [grams, ...values] = JSON.parse(el.dataset.init);
+        const factor = Number(chip.dataset.factor);
+        const round1 = v => Math.round(v * 10) / 10;
+        el.querySelector('[data-field="grams"]').value = grams ? round1(grams * factor) : '';
+        NUTRIENTS.forEach((f, i) => {
+            el.querySelector(`[data-field="${f}"]`).value = i === 0 ? Math.round(values[i] * factor) : round1(values[i] * factor);
+        });
+        // Mengentext der Schnellwahl übernehmen
+        el.dataset.amount = chip.dataset.amount;
+        el.dataset.grams = grams ? round1(grams * factor) : '';
+        setScaleBase(el);
+        el.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+    });
 
-    $('preview-save-btn').addEventListener('click', async () => {
-        const saveBtn = $('preview-save-btn');
-        const rows = [...$('preview-list').querySelectorAll('.preview-item')].map(el => {
+    function readPreviewRows() {
+        return [...$('preview-list').querySelectorAll('.preview-item')].map(el => {
             const val = field => el.querySelector(`[data-field="${field}"]`).value;
             const grams = num(val('grams'));
             return {
-                user_id: currentSession.user.id,
-                day: currentDay,
                 name: val('name').trim() || 'Unbenannt',
                 grams: grams || null,
                 amount: amountText(grams, el.dataset.grams, el.dataset.amount),
@@ -1184,6 +1327,11 @@
                 source: el.dataset.source
             };
         });
+    }
+
+    $('preview-save-btn').addEventListener('click', async () => {
+        const saveBtn = $('preview-save-btn');
+        const rows = readPreviewRows().map(row => ({ ...row, user_id: currentSession.user.id, day: currentDay }));
 
         saveBtn.disabled = true;
         const { error } = await supabase.from('entries').insert(rows);
@@ -1195,12 +1343,459 @@
             return;
         }
 
+        rows.forEach(addToHistory);
         $('food-input').value = '';
         $('image-input').value = '';
         $('photo-btn').classList.remove('has-file');
         hidePreview();
         loadDay();
     });
+
+    // ---------- Gerichte ----------
+
+    // Faktor-Schnellwahl für Portionen (Gerichte, Verlauf)
+    function portionChips(grams, unit, baseAmount) {
+        const g = f => grams ? ` (≈ ${Math.round(grams * f)} g)` : '';
+        if (unit === 'portion') {
+            return [
+                { label: '½ Portion', factor: 0.5, amount: '½ Portion' + g(0.5) },
+                { label: '1 Portion', factor: 1, amount: '1 Portion' + g(1) },
+                { label: '1,5 Portionen', factor: 1.5, amount: '1,5 Portionen' + g(1.5) },
+                { label: '2 Portionen', factor: 2, amount: '2 Portionen' + g(2) }
+            ];
+        }
+        return [
+            { label: '½×', factor: 0.5, amount: grams ? `${Math.round(grams / 2)} g` : `½ × ${baseAmount || 'wie zuletzt'}` },
+            { label: 'Wie zuletzt', factor: 1, amount: baseAmount || (grams ? `${grams} g` : '') },
+            { label: '1,5×', factor: 1.5, amount: grams ? `${Math.round(grams * 1.5)} g` : `1,5 × ${baseAmount || 'wie zuletzt'}` },
+            { label: '2×', factor: 2, amount: grams ? `${grams * 2} g` : `2 × ${baseAmount || 'wie zuletzt'}` }
+        ];
+    }
+
+    function mealItem(meal) {
+        const grams = Number(meal.grams) || null;
+        return {
+            name: meal.name,
+            amount: '1 Portion' + (grams ? ` (≈ ${Math.round(grams)} g)` : ''),
+            grams,
+            kcal: meal.kcal,
+            protein_g: Number(meal.protein_g),
+            carbs_g: Number(meal.carbs_g),
+            fat_g: Number(meal.fat_g),
+            source: 'meal',
+            note: `Dein Gericht${meal.items?.length ? ' aus ' + meal.items.length + ' Zutaten' : ''}`,
+            chips: portionChips(grams, 'portion')
+        };
+    }
+
+    $('meal-save-btn').addEventListener('click', async () => {
+        const name = $('meal-name').value.trim();
+        if (!name) {
+            $('meal-name').focus();
+            return;
+        }
+        const items = readPreviewRows();
+        const sum = f => items.reduce((s, i) => s + Number(i[f] || 0), 0);
+        const meal = {
+            user_id: currentSession.user.id,
+            name,
+            grams: items.every(i => i.grams) ? Math.round(sum('grams')) : null,
+            kcal: Math.round(sum('kcal')),
+            protein_g: Math.round(sum('protein_g') * 10) / 10,
+            carbs_g: Math.round(sum('carbs_g') * 10) / 10,
+            fat_g: Math.round(sum('fat_g') * 10) / 10,
+            items
+        };
+
+        $('meal-save-btn').disabled = true;
+        const { data, error } = await supabase.from('meals').insert(meal).select().single();
+        $('meal-save-btn').disabled = false;
+        if (error) {
+            alert('Gericht konnte nicht gemerkt werden: ' + error.message);
+            return;
+        }
+
+        mealsList.unshift(data);
+        renderMeals();
+        // Vorschau zu einem Eintrag zusammenfassen
+        showPreview([mealItem(data)], [], {});
+    });
+
+    function renderMeals() {
+        $('meals-count').innerText = mealsList.length ? `(${mealsList.length})` : '';
+        $('meals-list').innerHTML = mealsList.length
+            ? mealsList.map(m => `
+                <div class="entry-item">
+                    <div class="entry-main">
+                        <div class="entry-name">${esc(m.name)}</div>
+                        <div class="entry-meta">1 Portion${m.grams ? ` (≈ ${fmt(m.grams)} g)` : ''} · ${fmt(m.protein_g)} g Eiweiß</div>
+                    </div>
+                    <span class="entry-kcal">${fmt(m.kcal)} kcal</span>
+                    <button type="button" class="icon-btn" data-meal-add="${esc(m.id)}" title="Eintragen">＋</button>
+                    <button type="button" class="icon-btn" data-meal-delete="${esc(m.id)}" title="Löschen">✕</button>
+                </div>`).join('')
+            : '<p class="sub-text" style="margin: 0;">Noch keine. Nach einer Berechnung kannst du sie mit „Als Gericht merken“ speichern.</p>';
+    }
+
+    $('meals-list').addEventListener('click', async (event) => {
+        const add = event.target.closest('[data-meal-add]');
+        const del = event.target.closest('[data-meal-delete]');
+        if (add) {
+            const meal = mealsList.find(m => String(m.id) === add.dataset.mealAdd);
+            if (meal) showPreview([mealItem(meal)], [], {});
+        }
+        if (del) {
+            if (!confirm('Gericht löschen? Bereits eingetragene Mahlzeiten bleiben erhalten.')) return;
+            const { error } = await supabase.from('meals').delete().eq('id', del.dataset.mealDelete);
+            if (error) {
+                alert('Löschen fehlgeschlagen: ' + error.message);
+                return;
+            }
+            mealsList = mealsList.filter(m => String(m.id) !== del.dataset.mealDelete);
+            renderMeals();
+        }
+    });
+
+    // ---------- Vorschläge beim Tippen ----------
+
+    let suggestions = [];
+    let suggestIndex = -1;
+
+    // "große tasse" -> "Große Tasse"
+    function capWords(s) {
+        return s.replace(/(^|\s)\S/g, c => c.toUpperCase());
+    }
+
+    // Führende Menge aus der Eingabe lesen: "2 Bananen" -> { count: 2 }, "250g Skyr" -> { grams: 250 }
+    function leadingQuantity(text) {
+        const m = text.trim().match(/^(\d+(?:[.,]\d+)?)\s*(g|ml|gramm)?(?=\s|$)/i);
+        if (!m) return { rest: text.trim() };
+        const n = num(m[1]);
+        return { rest: text.trim().slice(m[0].length).trim(), [m[2] ? 'grams' : 'count']: n };
+    }
+
+    function suggestionsFor(text) {
+        const { rest } = leadingQuantity(text);
+        const q = rest.toLowerCase();
+        const words = q.split(/\s+/).filter(Boolean);
+        // Längere Sätze sind Beschreibungen -> keine Vorschläge, einfach senden
+        if (q.length < 2 || words.length > 3) return [];
+
+        const matches = t => words.every(w => t.toLowerCase().includes(w));
+        const bonus = t => {
+            const s = t.toLowerCase();
+            if (s.startsWith(q)) return 50;
+            return s.split(/[\s\-(]+/).some(tok => tok.startsWith(words[0])) ? 20 : 0;
+        };
+
+        const out = [];
+        const seen = new Set();
+        for (const meal of mealsList) {
+            const key = meal.name.trim().toLowerCase();
+            if (seen.has(key) || !matches(meal.name)) continue;
+            seen.add(key);
+            out.push({ type: 'meal', meal, score: 300 + bonus(meal.name) + (historyMap.get(key)?.count || 0) * 5 });
+        }
+        for (const [key, h] of historyMap) {
+            if (seen.has(key) || !matches(h.last.name)) continue;
+            seen.add(key);
+            out.push({ type: 'history', h, score: 200 + bonus(h.last.name) + Math.min(h.count, 20) * 5 });
+        }
+        for (const food of foodsList) {
+            const key = food.name.trim().toLowerCase();
+            const texts = [food.name, ...(food.alias || [])];
+            if (seen.has(key) || !texts.some(matches)) continue;
+            seen.add(key);
+            out.push({ type: 'food', food, score: 100 + Math.max(...texts.map(bonus)) });
+        }
+        return out.sort((a, b) => b.score - a.score).slice(0, 5);
+    }
+
+    function renderSuggestions() {
+        const list = $('suggest-list');
+        if (!suggestions.length) {
+            list.classList.add('hidden');
+            return;
+        }
+        list.innerHTML = suggestions.map((s, i) => {
+            let name, meta, kcal;
+            if (s.type === 'meal') {
+                name = s.meal.name;
+                meta = 'Dein Gericht · 1 Portion';
+                kcal = `${fmt(s.meal.kcal)} kcal`;
+            } else if (s.type === 'history') {
+                name = s.h.last.name;
+                meta = `${s.h.count}× eingetragen${s.h.last.amount ? ' · zuletzt ' + s.h.last.amount : ''}`;
+                kcal = `${fmt(s.h.last.kcal)} kcal`;
+            } else {
+                name = s.food.name;
+                meta = 'Tabelle · pro 100 g';
+                kcal = `${fmt(s.food.kcal)} kcal`;
+            }
+            return `
+                <div class="suggest-item${i === suggestIndex ? ' active' : ''}" data-index="${i}">
+                    <div style="min-width: 0;">
+                        <div class="suggest-name">${esc(name)}</div>
+                        <div class="suggest-meta">${esc(meta)}</div>
+                    </div>
+                    <span class="suggest-kcal">${kcal}</span>
+                </div>`;
+        }).join('');
+        list.classList.remove('hidden');
+    }
+
+    function hideSuggestions() {
+        suggestions = [];
+        suggestIndex = -1;
+        $('suggest-list').classList.add('hidden');
+    }
+
+    function foodItem(food, qty) {
+        const units = food.units || {};
+        const piece = Number(food.piece_g) || 0;
+        const options = [];
+        if (piece) options.push({ label: '1 Stück', grams: piece });
+        Object.entries(units).forEach(([unit, g]) => options.push({ label: capWords(unit), grams: Number(g) }));
+        if (!options.some(o => o.grams === Number(food.portion_g))) options.push({ label: 'Portion', grams: Number(food.portion_g) });
+        if (!options.some(o => o.grams === 100)) options.push({ label: '100 g', grams: 100 });
+
+        let grams = piece || Number(food.portion_g);
+        let amount = piece ? '1 Stück' : options.find(o => o.grams === grams)?.label || `${grams} g`;
+        if (qty.grams) {
+            grams = qty.grams;
+            amount = `${fmtNum(grams)} g`;
+        } else if (qty.count && piece) {
+            grams = qty.count * piece;
+            amount = `${fmtNum(qty.count)} Stück`;
+        }
+        if (!/\bg\)?$/.test(amount)) amount += ` (≈ ${Math.round(grams)} g)`;
+
+        const k = grams / 100;
+        return {
+            name: food.name,
+            amount,
+            grams: Math.round(grams * 10) / 10,
+            kcal: Math.round(food.kcal * k),
+            protein_g: Math.round(food.protein_g * k * 10) / 10,
+            carbs_g: Math.round(food.carbs_g * k * 10) / 10,
+            fat_g: Math.round(food.fat_g * k * 10) / 10,
+            source: 'tabelle',
+            note: [food.note, 'Standardwert aus Tabelle'].filter(Boolean).join(' · '),
+            chips: options.map(o => {
+                const label = o.label === '100 g' ? '100 g' : `${o.label} (${o.grams} g)`;
+                return { label, factor: o.grams / grams, amount: label };
+            })
+        };
+    }
+
+    function historyItem(h, qty) {
+        const e = h.last;
+        const grams = Number(e.grams) || gramsFromAmount(e.amount) || null;
+        let factor = 1;
+        let amount = e.amount || '';
+        if (qty.grams && grams) {
+            factor = qty.grams / grams;
+            amount = `${fmtNum(qty.grams)} g`;
+        } else if (qty.count) {
+            // "2 Bananen": Stückgewicht aus der Tabelle, sonst war der letzte Eintrag "1 …"
+            const key = e.name.trim().toLowerCase();
+            const food = foodsList.find(f => f.name.toLowerCase() === key || (f.alias || []).includes(key));
+            if (food?.piece_g && grams) {
+                factor = (qty.count * food.piece_g) / grams;
+                amount = `${fmtNum(qty.count)} Stück (≈ ${Math.round(qty.count * food.piece_g)} g)`;
+            } else if (/^1\s/.test(amount)) {
+                factor = qty.count;
+                amount = `${fmtNum(qty.count)} × ${amount.slice(2)}`;
+            }
+        }
+        const item = {
+            name: e.name,
+            amount,
+            grams: grams ? Math.round(grams * factor * 10) / 10 : null,
+            kcal: Math.round(e.kcal * factor),
+            protein_g: Math.round(e.protein_g * factor * 10) / 10,
+            carbs_g: Math.round(e.carbs_g * factor * 10) / 10,
+            fat_g: Math.round(e.fat_g * factor * 10) / 10,
+            source: e.source || 'manual',
+            note: `Wie zuletzt · ${h.count}× eingetragen`
+        };
+        item.chips = factor === 1 ? portionChips(grams, 'last', e.amount) : [];
+        return item;
+    }
+
+    function fmtNum(n) {
+        return String(Math.round(n * 10) / 10).replace('.', ',');
+    }
+
+    function pickSuggestion(i) {
+        const s = suggestions[i];
+        if (!s) return;
+        const qty = leadingQuantity($('food-input').value);
+        hideSuggestions();
+        hideStatus();
+        const item = s.type === 'meal' ? mealItem(s.meal) : s.type === 'history' ? historyItem(s.h, qty) : foodItem(s.food, qty);
+        showPreview([item], [], {});
+    }
+
+    $('food-input').addEventListener('input', () => {
+        suggestions = suggestionsFor($('food-input').value);
+        suggestIndex = -1;
+        renderSuggestions();
+    });
+
+    $('food-input').addEventListener('blur', () => setTimeout(hideSuggestions, 150));
+
+    // mousedown statt click, damit das Eingabefeld den Fokus nicht vorher verliert
+    $('suggest-list').addEventListener('mousedown', (event) => {
+        const row = event.target.closest('.suggest-item');
+        if (!row) return;
+        event.preventDefault();
+        pickSuggestion(Number(row.dataset.index));
+    });
+
+    $('food-input').addEventListener('keydown', (event) => {
+        if (!suggestions.length) return;
+        if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+            event.preventDefault();
+            const n = suggestions.length;
+            suggestIndex = (suggestIndex + (event.key === 'ArrowDown' ? 1 : -1) + n) % n;
+            renderSuggestions();
+        } else if (event.key === 'Escape') {
+            hideSuggestions();
+        } else if (event.key === 'Enter' && suggestIndex >= 0) {
+            // ausgewählter Vorschlag statt Senden
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            pickSuggestion(suggestIndex);
+        }
+    });
+
+    // ---------- Barcode ----------
+
+    let scanner = null;
+
+    function loadScript(src) {
+        return new Promise((resolve, reject) => {
+            if (document.querySelector(`script[src="${src}"]`)) return resolve();
+            const s = document.createElement('script');
+            s.src = src;
+            s.onload = resolve;
+            s.onerror = () => reject(new Error('Laden fehlgeschlagen'));
+            document.head.appendChild(s);
+        });
+    }
+
+    async function getScanner() {
+        await loadScript(SCANNER_URL);
+        if (!scanner) {
+            const F = window.Html5QrcodeSupportedFormats;
+            scanner = new window.Html5Qrcode('scan-reader', {
+                formatsToSupport: [F.EAN_13, F.EAN_8, F.UPC_A, F.UPC_E],
+                verbose: false
+            });
+        }
+        return scanner;
+    }
+
+    async function openScanner() {
+        hidePreview();
+        hideStatus();
+        hideSuggestions();
+        $('scan-code').value = '';
+        $('scan-card').classList.remove('hidden');
+        $('scan-card').scrollIntoView({ behavior: 'smooth' });
+        $('scan-hint').innerText = 'Kamera wird gestartet …';
+        try {
+            const sc = await getScanner();
+            if (sc.isScanning) return;
+            await sc.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 260, height: 130 } }, onBarcode);
+            $('scan-hint').innerText = 'Kamera auf den Barcode richten.';
+        } catch (err) {
+            $('scan-hint').innerText = 'Kamera nicht verfügbar. Mach ein Foto vom Barcode oder tippe die Nummer ein.';
+        }
+    }
+
+    async function closeScanner() {
+        if (scanner && scanner.isScanning) {
+            try { await scanner.stop(); } catch (e) {}
+        }
+        $('scan-card').classList.add('hidden');
+    }
+
+    async function onBarcode(code) {
+        await closeScanner();
+        lookupBarcode(code);
+    }
+
+    $('scan-btn').addEventListener('click', openScanner);
+    $('scan-close-btn').addEventListener('click', closeScanner);
+
+    $('scan-file').addEventListener('change', async () => {
+        const file = $('scan-file').files[0];
+        $('scan-file').value = '';
+        if (!file) return;
+        $('scan-hint').innerText = 'Lese Barcode aus dem Foto …';
+        try {
+            const sc = await getScanner();
+            if (sc.isScanning) await sc.stop();
+            const code = await sc.scanFile(file, false);
+            onBarcode(code);
+        } catch (err) {
+            $('scan-hint').innerText = 'Kein Barcode erkannt. Nochmal näher und scharf fotografieren oder die Nummer eintippen.';
+        }
+    });
+
+    $('scan-code-btn').addEventListener('click', () => {
+        const code = $('scan-code').value.replace(/\D/g, '');
+        if (code.length >= 8) onBarcode(code);
+        else $('scan-hint').innerText = 'Bitte die komplette Nummer unter dem Barcode eingeben (8 oder 13 Ziffern).';
+    });
+
+    async function lookupBarcode(code) {
+        showStatus(`Suche Produkt ${code} …`, false);
+        $('status-retry-btn').classList.add('hidden');
+        let product = null;
+        try {
+            const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json` +
+                '?fields=product_name,product_name_de,brands,nutriments,serving_quantity,product_quantity', { signal: AbortSignal.timeout(10000) });
+            const d = await r.json();
+            if (d.status === 1) product = d.product;
+        } catch (err) {
+            showStatus('Open Food Facts ist gerade nicht erreichbar. Beschreib das Produkt stattdessen im Textfeld.', true, false);
+            return;
+        }
+
+        const n = product?.nutriments || {};
+        if (!product || n['energy-kcal_100g'] == null) {
+            showStatus(`Produkt ${code} ist bei Open Food Facts nicht (vollständig) eingetragen. Beschreib es stattdessen im Textfeld.`, true, false);
+            return;
+        }
+
+        const serving = num(product.serving_quantity);
+        const pkg = num(product.product_quantity);
+        const grams = serving || 100;
+        const k = grams / 100;
+        const brand = (product.brands || '').split(',')[0].trim();
+        const options = [];
+        if (serving) options.push({ label: `1 Portion (${fmtNum(serving)} g)`, grams: serving });
+        options.push({ label: '100 g', grams: 100 });
+        if (pkg && pkg !== serving && pkg !== 100) options.push({ label: `Packung (${fmtNum(pkg)} g)`, grams: pkg });
+
+        hideStatus();
+        showPreview([{
+            name: `${product.product_name_de || product.product_name || 'Produkt'}${brand ? ` (${brand})` : ''}`,
+            amount: serving ? `1 Portion (${fmtNum(serving)} g)` : '100 g',
+            grams,
+            kcal: Math.round(Number(n['energy-kcal_100g']) * k),
+            protein_g: Math.round(Number(n.proteins_100g || 0) * k * 10) / 10,
+            carbs_g: Math.round(Number(n.carbohydrates_100g || 0) * k * 10) / 10,
+            fat_g: Math.round(Number(n.fat_100g || 0) * k * 10) / 10,
+            source: 'off',
+            source_url: `https://world.openfoodfacts.org/product/${encodeURIComponent(code)}`,
+            note: `Barcode ${code}`,
+            chips: options.map(o => ({ label: o.label, factor: o.grams / grams, amount: o.label }))
+        }], [], {});
+    }
 </script>
 
 </body>
