@@ -2,16 +2,52 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Kcal & Protein Tracker</title>
     <style>
         :root {
+            color-scheme: light;
+            --bg: #f3f5f6;
+            --card: #ffffff;
+            --field: #eef1f3;
+            --accent: #0b9e76;
+            --accent-ink: #ffffff;
+            --text: #14191c;
+            --mute: #5f6d78;
+            --border: #dce2e6;
+            --track: #e2e7ea;
+            --warn: #d27a1f;
+            --danger: #cf3f3f;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme="light"]) {
+                color-scheme: dark;
+                --bg: #12181b;
+                --card: #1a2328;
+                --field: #0f1417;
+                --accent: #2ae8b3;
+                --accent-ink: #00140e;
+                --text: #ffffff;
+                --mute: #8a99a6;
+                --border: #2a373f;
+                --track: #25323a;
+                --warn: #f0a050;
+                --danger: #ff6b6b;
+            }
+        }
+        :root[data-theme="dark"] {
+            color-scheme: dark;
             --bg: #12181b;
             --card: #1a2328;
+            --field: #0f1417;
             --accent: #2ae8b3;
+            --accent-ink: #00140e;
             --text: #ffffff;
             --mute: #8a99a6;
             --border: #2a373f;
+            --track: #25323a;
+            --warn: #f0a050;
+            --danger: #ff6b6b;
         }
         body {
             background-color: var(--bg);
@@ -19,7 +55,7 @@
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             padding: 16px;
-            padding-bottom: 90px;
+            padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
             display: flex;
             justify-content: center;
         }
@@ -38,16 +74,21 @@
         }
         .hidden { display: none !important; }
         h1, h2, h3 { margin: 0 0 10px 0; }
-        .sub-text { color: var(--mute); font-size: 14px; margin-bottom: 16px; }
-        input, textarea {
+        h1 { font-size: 22px; }
+        h3 { font-size: 16px; }
+        .sub-text { color: var(--mute); font-size: 14px; margin: 0 0 16px 0; }
+        label { display: block; font-size: 12px; color: var(--mute); margin-bottom: 4px; }
+        input, select {
             width: 100%;
             padding: 12px;
             margin-bottom: 12px;
             border-radius: 8px;
             border: 1px solid var(--border);
-            background: #0f1417;
-            color: #fff;
+            background: var(--field);
+            color: var(--text);
+            font-size: 16px;
             box-sizing: border-box;
+            min-width: 0;
         }
         .btn {
             width: 100%;
@@ -55,96 +96,299 @@
             border: none;
             border-radius: 10px;
             background: var(--accent);
-            color: #000;
+            color: var(--accent-ink);
             font-weight: 600;
             font-size: 15px;
             cursor: pointer;
         }
-        .btn-sec { background: transparent; border: 1px solid var(--accent); color: var(--accent); margin-top: 8px; }
-        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .stat-box { background: #0f1417; padding: 12px; border-radius: 8px; text-align: center; }
-        .stat-val { font-size: 22px; font-weight: bold; color: var(--accent); }
-        .stat-label { font-size: 12px; color: var(--mute); }
+        .btn:disabled { opacity: 0.6; cursor: default; }
+        .btn-sec { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
+        .btn-small { width: auto; padding: 6px 12px; font-size: 13px; }
+        .icon-btn {
+            background: none;
+            border: none;
+            color: var(--mute);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 6px 8px;
+            border-radius: 8px;
+        }
+        .icon-btn:hover { background: var(--field); }
+        .icon-btn:disabled { opacity: 0.3; cursor: default; background: none; }
+        .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 6px; }
+        .grid-4 input { padding: 8px; font-size: 15px; }
+        .row { display: flex; gap: 8px; }
+        .row > * { flex: 1; }
+
+        /* Kopfzeile & Tagesnavigation */
+        .topbar { display: flex; justify-content: space-between; align-items: center; }
+        .topbar h1 { margin: 0; }
+        .daynav { display: flex; justify-content: space-between; align-items: center; }
+        .daynav-label { font-weight: 600; font-size: 16px; }
+
+        /* Tagesring */
+        .summary { display: flex; align-items: center; gap: 20px; }
+        .ring { width: 132px; height: 132px; flex-shrink: 0; }
+        .ring-track { stroke: var(--track); }
+        .ring-bar { stroke: var(--accent); transition: stroke-dashoffset 0.4s; }
+        .ring-bar.over { stroke: var(--warn); }
+        .ring-val { font-size: 24px; font-weight: 700; fill: var(--text); }
+        .ring-label { font-size: 11px; fill: var(--mute); }
+        .summary-side { flex: 1; min-width: 0; }
+        .remaining { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+        .remaining.over { color: var(--warn); }
+        .bar-head { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+        .bar { height: 10px; background: var(--track); border-radius: 5px; overflow: hidden; }
+        .bar-fill { height: 100%; background: var(--accent); border-radius: 5px; transition: width 0.4s; }
+        .macros { font-size: 12px; color: var(--mute); margin-top: 12px; }
+
+        /* Einträge */
+        .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .card-head h3 { margin: 0; }
+        .entry-item { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .entry-item:last-child { border-bottom: none; }
+        .entry-main { flex: 1; min-width: 0; }
+        .entry-name { font-weight: 600; overflow-wrap: anywhere; }
+        .entry-meta { color: var(--mute); font-size: 12px; margin-top: 2px; }
+        .entry-kcal { font-weight: 600; white-space: nowrap; }
+        .entry-form { border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 12px; }
+
+        /* Vorschau */
+        .preview-item { border-bottom: 1px solid var(--border); padding: 10px 0; }
+        .preview-item:last-of-type { border-bottom: none; }
+        .preview-item input { margin-bottom: 6px; padding: 8px; font-size: 15px; }
+        .preview-note { font-size: 12px; color: var(--mute); }
+        .preview-note a { color: var(--accent); }
+        .badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 6px; margin-right: 4px; background: var(--field); color: var(--mute); }
+        .badge.tabelle, .badge.off { color: var(--accent); }
+        .badge.ki { color: var(--warn); }
+        .preview-head { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 0 8px; }
+        .sources { margin-top: 8px; }
+        .sources a { color: var(--accent); font-size: 12px; display: block; margin-top: 4px; overflow-wrap: anywhere; }
+
+        /* Ladeanzeige */
+        .status-row { display: flex; align-items: center; gap: 12px; font-size: 15px; }
+        .spinner {
+            width: 20px; height: 20px; flex-shrink: 0;
+            border: 3px solid var(--track); border-top-color: var(--accent);
+            border-radius: 50%; animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #status-card.error .spinner { display: none; }
+        #status-card.error #status-text { color: var(--danger); }
+
+        /* Onboarding */
+        .result-box { background: var(--field); border-radius: 10px; padding: 12px; margin-bottom: 12px; font-size: 14px; }
+        .result-line { display: flex; justify-content: space-between; padding: 3px 0; }
+        .result-line b { font-size: 15px; }
+        .result-hint { font-size: 12px; color: var(--mute); margin-top: 6px; }
+
+        /* 7-Tage-Chart */
+        .chart { width: 100%; height: auto; display: block; }
+        .chart-bar { fill: var(--accent); cursor: pointer; }
+        .chart-bar.over { fill: var(--warn); }
+        .chart-bar.dim { opacity: 0.45; }
+        .chart-goal { stroke: var(--mute); stroke-dasharray: 4 4; }
+        .chart-label { font-size: 11px; fill: var(--mute); }
+        .chart-label.sel { fill: var(--text); font-weight: 700; }
+        .chart-val { font-size: 10px; fill: var(--mute); }
+        .chart-avg { font-size: 13px; color: var(--mute); margin-top: 8px; }
+
+        /* Chatleiste */
         .chat-footer {
             position: fixed;
             bottom: 0;
             left: 0;
             right: 0;
             background: var(--card);
-            padding: 12px;
+            padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
             border-top: 1px solid var(--border);
             display: flex;
             justify-content: center;
             z-index: 100;
         }
         .chat-container { width: 100%; max-width: 480px; display: flex; gap: 8px; align-items: center; }
-        .entry-item { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .chat-container input[type="text"] { margin-bottom: 0; flex: 1; min-width: 0; }
+        .photo-btn { width: auto; padding: 10px 12px; flex-shrink: 0; }
+        .photo-btn.has-file { background: var(--warn); }
+        .send-btn { width: auto; padding: 12px 16px; flex-shrink: 0; }
     </style>
 </head>
 <body>
 
 <main>
-    <!-- Auth Section / Login Card -->
+    <!-- Login -->
     <div id="auth-card" class="card">
-        <h2>Willkommen zurück</h2>
-        <p class="sub-text">Melde dich mit Supabase an.</p>
-        <input type="email" id="email-input" placeholder="E-Mail Adresse">
-        <input type="password" id="password-input" placeholder="Passwort">
+        <h2>Willkommen</h2>
+        <p class="sub-text">Melde dich an oder lege ein Konto an.</p>
+        <input type="email" id="email-input" placeholder="E-Mail Adresse" autocomplete="email">
+        <input type="password" id="password-input" placeholder="Passwort" autocomplete="current-password">
         <button class="btn" id="login-btn">Anmelden / Registrieren</button>
     </div>
 
-    <!-- Dashboard Content -->
-    <div id="dashboard" class="card hidden">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-            <h1>Dashboard</h1>
-            <button id="logout-btn" style="background: none; border: none; color: var(--mute); cursor: pointer;">Abmelden</button>
+    <!-- Onboarding / Ziele -->
+    <form id="onboarding" class="card hidden" novalidate>
+        <h2>Deine Ziele</h2>
+        <p class="sub-text">Daraus berechnen wir Kalorien- und Eiweißziel.</p>
+        <div class="grid-2">
+            <div>
+                <label for="ob-weight">Gewicht (kg)</label>
+                <input type="number" id="ob-weight" step="0.1" min="30" max="300" inputmode="decimal" placeholder="80">
+            </div>
+            <div>
+                <label for="ob-height">Größe (cm)</label>
+                <input type="number" id="ob-height" min="120" max="230" inputmode="numeric" placeholder="180">
+            </div>
+            <div>
+                <label for="ob-age">Alter</label>
+                <input type="number" id="ob-age" min="14" max="100" inputmode="numeric" placeholder="30">
+            </div>
+            <div>
+                <label for="ob-sex">Geschlecht</label>
+                <select id="ob-sex">
+                    <option value="m">Männlich</option>
+                    <option value="w">Weiblich</option>
+                </select>
+            </div>
         </div>
-        <p class="sub-text" id="user-greeting">Hallo!</p>
-
-        <div class="grid-2" style="margin-bottom: 16px;">
-            <div class="stat-box">
-                <div class="stat-val" id="kcal-current">0</div>
-                <div class="stat-label">/ <span id="kcal-goal-display">2500</span> kcal</div>
+        <label for="ob-activity">Aktivität</label>
+        <select id="ob-activity">
+            <option value="sitzend">Sitzend (Büro, kaum Sport)</option>
+            <option value="leicht">Leicht aktiv (1–3× Sport/Woche)</option>
+            <option value="maessig" selected>Mäßig aktiv (3–5× Sport/Woche)</option>
+            <option value="aktiv">Sehr aktiv (6–7× Sport/Woche)</option>
+            <option value="extrem">Extrem aktiv (körperliche Arbeit + Sport)</option>
+        </select>
+        <div class="grid-2">
+            <div>
+                <label for="ob-goal">Ziel</label>
+                <select id="ob-goal">
+                    <option value="abnehmen">Abnehmen</option>
+                    <option value="halten">Gewicht halten</option>
+                    <option value="zunehmen">Zunehmen</option>
+                </select>
             </div>
-            <div class="stat-box">
-                <div class="stat-val" id="protein-current">0</div>
-                <div class="stat-label">g Protein</div>
+            <div>
+                <label for="ob-protein">Eiweiß (g pro kg)</label>
+                <input type="number" id="ob-protein" step="0.1" min="1.6" max="2.2" inputmode="decimal" value="2.0">
             </div>
         </div>
 
-        <!-- Ziele -->
-        <div class="card" style="background: #0f1417;">
-            <h3>Ziele & Werte</h3>
-            <div class="grid-2">
-                <div>
-                    <label class="stat-label">Ziel-Kalorien</label>
-                    <input type="number" id="goal-kcal-input" value="2500">
-                </div>
-                <div>
-                    <label class="stat-label">Gewicht (kg)</label>
-                    <input type="number" id="weight-input" step="0.1" placeholder="80.0">
-                </div>
+        <div class="result-box" id="ob-result">
+            <div class="result-hint">Bitte Gewicht, Größe und Alter eingeben.</div>
+        </div>
+
+        <button type="submit" class="btn" id="ob-save-btn">Ziele speichern</button>
+        <button type="button" class="btn btn-sec hidden" id="ob-cancel-btn" style="margin-top: 8px;">Abbrechen</button>
+    </form>
+
+    <!-- App -->
+    <div id="app" class="hidden" style="display: flex; flex-direction: column; gap: 16px;">
+        <div class="topbar">
+            <h1>Tracker</h1>
+            <div>
+                <button class="icon-btn" id="theme-btn" title="Hell/Dunkel">◐</button>
+                <button class="icon-btn" id="settings-btn" title="Ziele ändern">⚙</button>
+                <button class="icon-btn" id="logout-btn" style="font-size: 13px;">Abmelden</button>
             </div>
-            <button class="btn btn-sec" id="save-goals-btn">Ziele speichern</button>
+        </div>
+
+        <div class="daynav">
+            <button class="icon-btn" id="prev-day-btn" title="Vorheriger Tag">‹</button>
+            <span class="daynav-label" id="day-label">Heute</span>
+            <button class="icon-btn" id="next-day-btn" title="Nächster Tag">›</button>
+        </div>
+
+        <!-- Tagesring + Eiweiß -->
+        <div class="card summary">
+            <svg class="ring" viewBox="0 0 120 120">
+                <circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="12"></circle>
+                <circle class="ring-bar" id="ring-bar" cx="60" cy="60" r="52" fill="none" stroke-width="12"
+                        stroke-linecap="round" transform="rotate(-90 60 60)"
+                        stroke-dasharray="326.73" stroke-dashoffset="326.73"></circle>
+                <text class="ring-val" id="ring-val" x="60" y="62" text-anchor="middle">0</text>
+                <text class="ring-label" id="ring-goal" x="60" y="80" text-anchor="middle">/ 0 kcal</text>
+            </svg>
+            <div class="summary-side">
+                <div class="remaining" id="kcal-remaining">Noch 0 kcal</div>
+                <div class="bar-head">
+                    <span>Eiweiß</span>
+                    <span id="protein-text">0 / 0 g</span>
+                </div>
+                <div class="bar"><div class="bar-fill" id="protein-fill" style="width: 0%;"></div></div>
+                <div class="macros" id="macros-text">KH 0 g · Fett 0 g</div>
+            </div>
+        </div>
+
+        <!-- Status der Analyse (Laden / Fehler) -->
+        <div class="card hidden" id="status-card">
+            <div class="status-row">
+                <span class="spinner" id="status-spinner"></span>
+                <span id="status-text">Analysiere …</span>
+            </div>
+            <div class="row" style="margin-top: 12px;">
+                <button class="btn btn-sec" id="status-cancel-btn">Abbrechen</button>
+                <button class="btn hidden" id="status-retry-btn">Nochmal versuchen</button>
+            </div>
+        </div>
+
+        <!-- Vorschau der KI-Schätzung -->
+        <div class="card hidden" id="preview-card">
+            <h3>Vorschau prüfen</h3>
+            <p class="sub-text" style="margin-bottom: 4px;">Werte bei Bedarf anpassen, dann speichern. <span id="preview-meta"></span></p>
+            <div id="preview-list"></div>
+            <div class="sources" id="preview-sources"></div>
+            <div class="row" style="margin-top: 12px;">
+                <button class="btn btn-sec" id="preview-cancel-btn">Verwerfen</button>
+                <button class="btn" id="preview-save-btn">Speichern</button>
+            </div>
         </div>
 
         <!-- Einträge -->
-        <div class="card" style="margin-top: 16px;">
-            <h3>Heute eingetragen</h3>
+        <div class="card">
+            <div class="card-head">
+                <h3>Einträge</h3>
+                <button class="btn btn-sec btn-small" id="add-entry-btn">+ Manuell</button>
+            </div>
+            <form id="entry-form" class="entry-form hidden" data-scale novalidate>
+                <div class="preview-head">
+                    <div><label for="f-name">Name</label><input type="text" id="f-name" placeholder="z. B. Skyr"></div>
+                    <div><label for="f-grams">Menge g/ml</label><input type="number" id="f-grams" data-field="grams" inputmode="decimal" min="0"></div>
+                </div>
+                <div class="grid-4">
+                    <div><label for="f-kcal">kcal</label><input type="number" id="f-kcal" data-field="kcal" inputmode="numeric" min="0"></div>
+                    <div><label for="f-protein">Eiweiß g</label><input type="number" id="f-protein" data-field="protein_g" step="0.1" inputmode="decimal" min="0"></div>
+                    <div><label for="f-carbs">KH g</label><input type="number" id="f-carbs" data-field="carbs_g" step="0.1" inputmode="decimal" min="0"></div>
+                    <div><label for="f-fat">Fett g</label><input type="number" id="f-fat" data-field="fat_g" step="0.1" inputmode="decimal" min="0"></div>
+                </div>
+                <p class="preview-note" style="margin: 0 0 10px;">Menge ändern rechnet kcal und Makros automatisch um.</p>
+                <div class="row">
+                    <button type="button" class="btn btn-sec" id="f-cancel-btn">Abbrechen</button>
+                    <button type="submit" class="btn" id="f-save-btn">Speichern</button>
+                </div>
+            </form>
             <div id="entries-list">
                 <p class="sub-text">Keine Einträge vorhanden.</p>
             </div>
         </div>
+
+        <!-- 7-Tage-Chart -->
+        <div class="card">
+            <h3>Letzte 7 Tage</h3>
+            <svg class="chart" id="week-chart" viewBox="0 0 320 150"></svg>
+            <div class="chart-avg" id="week-avg"></div>
+        </div>
     </div>
 </main>
 
-<!-- Chat / Eingabe Footer Bar -->
+<!-- Chatleiste -->
 <div class="chat-footer hidden" id="chat-footer">
     <div class="chat-container">
-        <label for="image-input" class="btn" style="width: auto; padding: 10px 14px; cursor: pointer;" title="Foto hochladen">📷</label>
+        <label for="image-input" class="btn photo-btn" id="photo-btn" title="Foto hinzufügen">📷</label>
         <input type="file" id="image-input" accept="image/*" class="hidden">
-        <input type="text" id="food-input" placeholder="Was hast du gegessen? (z.B. 2 Bananen)" style="margin-bottom: 0;">
-        <button class="btn" id="send-btn" style="width: auto; padding: 10px 16px;">Senden</button>
+        <input type="text" id="food-input" placeholder="Was hast du gegessen?" autocomplete="off" enterkeyhint="send">
+        <button class="btn send-btn" id="send-btn">Senden</button>
     </div>
 </div>
 
@@ -154,109 +398,697 @@
     const SUPABASE_ANON_KEY = 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const authCard = document.getElementById('auth-card');
-    const dashboard = document.getElementById('dashboard');
-    const chatFooter = document.getElementById('chat-footer');
-    const loginBtn = document.getElementById('login-btn');
-    const logoutBtn = document.getElementById('logout-btn');
-    const userGreeting = document.getElementById('user-greeting');
-    const sendBtn = document.getElementById('send-btn');
-    const foodInput = document.getElementById('food-input');
-    const imageInput = document.getElementById('image-input');
-    const entriesList = document.getElementById('entries-list');
-    const kcalCurrent = document.getElementById('kcal-current');
-    const proteinCurrent = document.getElementById('protein-current');
-    const kcalGoalDisplay = document.getElementById('kcal-goal-display');
-    const goalKcalInput = document.getElementById('goal-kcal-input');
+    const $ = id => document.getElementById(id);
+
+    // Aktivitätsfaktoren (Mifflin-St Jeor × PAL)
+    const ACTIVITY = { sitzend: 1.2, leicht: 1.375, maessig: 1.55, aktiv: 1.725, extrem: 1.9 };
+    // Kalorien-Anpassung und Standard-Eiweiß (g/kg) je Ziel
+    const GOALS = {
+        abnehmen: { delta: -400, protein: 2.0 },
+        halten: { delta: 0, protein: 1.6 },
+        zunehmen: { delta: 300, protein: 1.8 }
+    };
+    const RING_LEN = 2 * Math.PI * 52;
+    // Herkunft der Nährwerte (entries.source)
+    const SOURCE_LABEL = { tabelle: 'Tabelle', off: 'Open Food Facts', ki: 'KI-Schätzung', ki_suche: 'KI + Suche', ai: 'KI' };
+    const NUTRIENTS = ['kcal', 'protein_g', 'carbs_g', 'fat_g'];
 
     let currentSession = null;
+    let profile = null;
+    let currentDay = todayStr();
     let localEntries = [];
+    let editingId = null;
+
+    // ---------- Hilfsfunktionen ----------
+
+    // Lokales Datum als YYYY-MM-DD (nicht UTC, sonst falscher Tag nach Mitternacht)
+    function dateStr(date) {
+        return date.getFullYear() + '-' +
+            String(date.getMonth() + 1).padStart(2, '0') + '-' +
+            String(date.getDate()).padStart(2, '0');
+    }
+
+    function todayStr() {
+        return dateStr(new Date());
+    }
+
+    function parseDay(day) {
+        const [y, m, d] = day.split('-').map(Number);
+        return new Date(y, m - 1, d);
+    }
+
+    function addDays(day, n) {
+        const date = parseDay(day);
+        date.setDate(date.getDate() + n);
+        return dateStr(date);
+    }
+
+    function dayLabel(day) {
+        if (day === todayStr()) return 'Heute';
+        if (day === addDays(todayStr(), -1)) return 'Gestern';
+        return parseDay(day).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
+    }
+
+    function fmt(n) {
+        return Math.round(Number(n) || 0).toLocaleString('de-DE');
+    }
+
+    function num(value) {
+        const n = Number(String(value).replace(',', '.'));
+        return Number.isFinite(n) && n > 0 ? n : 0;
+    }
+
+    // Gramm aus alten Mengentexten lesen: "250 g", "2 Stück (≈ 240 g)", "14"
+    function gramsFromAmount(amount) {
+        const text = String(amount || '');
+        const m = text.match(/≈\s*([\d.,]+)\s*(?:g|ml)\b/) || text.match(/^\s*([\d.,]+)\s*(?:g|ml)?\s*$/);
+        return m ? num(m[1]) : 0;
+    }
+
+    // ---------- Mengen-Umrechnung (Vorschau + Bearbeiten) ----------
+    // Container mit [data-scale] merkt sich Menge + Nährwerte als Basis.
+    // Menge ändern -> Nährwerte anteilig; Nährwert von Hand ändern -> neue Basis.
+
+    function setScaleBase(box) {
+        const get = f => box.querySelector(`[data-field="${f}"]`);
+        box.dataset.baseGrams = num(get('grams').value) || '';
+        box.dataset.base = JSON.stringify(NUTRIENTS.map(f => num(get(f).value)));
+    }
+
+    function onScaleInput(event) {
+        const box = event.target.closest('[data-scale]');
+        const field = event.target.dataset.field;
+        if (!box || !field) return;
+        const get = f => box.querySelector(`[data-field="${f}"]`);
+
+        if (field === 'grams') {
+            const baseGrams = Number(box.dataset.baseGrams);
+            const grams = num(event.target.value);
+            // Ohne Ausgangsmenge (alter Eintrag) lässt sich nicht umrechnen
+            if (!baseGrams || !grams) return;
+            const factor = grams / baseGrams;
+            JSON.parse(box.dataset.base).forEach((v, i) => {
+                get(NUTRIENTS[i]).value = i === 0 ? Math.round(v * factor) : Math.round(v * factor * 10) / 10;
+            });
+        } else if (NUTRIENTS.includes(field)) {
+            setScaleBase(box);
+        }
+    }
+
+    function esc(value) {
+        return String(value ?? '').replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
+
+    // ---------- Hell/Dunkel ----------
+
+    function applyTheme(theme) {
+        if (theme) document.documentElement.dataset.theme = theme;
+        else delete document.documentElement.dataset.theme;
+    }
+
+    try { applyTheme(localStorage.getItem('theme')); } catch (e) {}
+
+    $('theme-btn').addEventListener('click', () => {
+        const isDark = document.documentElement.dataset.theme
+            ? document.documentElement.dataset.theme === 'dark'
+            : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const next = isDark ? 'light' : 'dark';
+        applyTheme(next);
+        try { localStorage.setItem('theme', next); } catch (e) {}
+    });
+
+    // ---------- Login ----------
 
     async function checkSession() {
         const { data: { session } } = await supabase.auth.getSession();
         if (session) {
             currentSession = session;
-            showApp();
+            startApp();
         }
     }
     checkSession();
 
-    function showApp() {
-        authCard.classList.add('hidden');
-        dashboard.classList.remove('hidden');
-        chatFooter.classList.remove('hidden');
-        userGreeting.innerText = `Hallo ${currentSession.user.email}!`;
-        loadEntries();
-    }
+    $('login-btn').addEventListener('click', async () => {
+        const loginBtn = $('login-btn');
+        const email = $('email-input').value.trim();
+        const password = $('password-input').value;
 
-    
-loginBtn.addEventListener('click', async () => {
-    const email = document.getElementById('email-input').value.trim();
-    const password = document.getElementById('password-input').value;
-
-    if (!email || !password) {
-        alert('Bitte E-Mail und Passwort eingeben.');
-        return;
-    }
-
-    loginBtn.disabled = true;
-
-    try {
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password
-        });
-
-        if (error) {
-            alert('Anmeldung fehlgeschlagen: ' + error.message);
+        if (!email || !password) {
+            alert('Bitte E-Mail und Passwort eingeben.');
             return;
         }
 
-        if (!data.session) {
-            alert('Keine Sitzung erhalten. Bitte versuche es erneut.');
-            return;
+        loginBtn.disabled = true;
+
+        try {
+            let { data, error } = await supabase.auth.signInWithPassword({ email, password });
+
+            // Unbekannter Nutzer: Konto anlegen
+            if (error && error.message.includes('Invalid login credentials')) {
+                if (confirm('Kein Konto gefunden oder falsches Passwort. Neues Konto anlegen?')) {
+                    ({ data, error } = await supabase.auth.signUp({ email, password }));
+                    if (!error && !data.session) {
+                        alert('Konto angelegt. Bitte bestätige deine E-Mail und melde dich dann an.');
+                        return;
+                    }
+                }
+            }
+
+            if (error) {
+                alert('Anmeldung fehlgeschlagen: ' + error.message);
+                return;
+            }
+
+            if (!data.session) {
+                alert('Keine Sitzung erhalten. Bitte versuche es erneut.');
+                return;
+            }
+
+            currentSession = data.session;
+            startApp();
+        } catch (err) {
+            alert('Unerwarteter Fehler: ' + err.message);
+        } finally {
+            loginBtn.disabled = false;
         }
-
-        currentSession = data.session;
-        showApp();
-
-    } catch (err) {
-        alert('Unerwarteter Fehler: ' + err.message);
-    } finally {
-        loginBtn.disabled = false;
-    }
-});
-
-
-    logoutBtn.addEventListener('click', async () => {
-        await supabase.auth.signOut();
-        dashboard.classList.add('hidden');
-        chatFooter.classList.add('hidden');
-        authCard.classList.remove('hidden');
     });
 
-    // Gemini Edge Function Aufruf
-    async function processWithGemini(payload) {
-        try {
-            const res = await fetch(`${SUPABASE_URL}/functions/v1/estimate`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-                },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
-            if (data.error) throw new Error(data.error);
-            return data.items || [];
-        } catch (err) {
-            alert('Fehler bei der KI-Analyse: ' + err.message);
-            return [];
+    $('password-input').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') $('login-btn').click();
+    });
+
+    $('logout-btn').addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        currentSession = null;
+        profile = null;
+        localEntries = [];
+        analyzeSeq++;
+        hideStatus();
+        hidePreview();
+        closeEntryForm();
+        $('app').classList.add('hidden');
+        $('onboarding').classList.add('hidden');
+        $('chat-footer').classList.add('hidden');
+        $('auth-card').classList.remove('hidden');
+    });
+
+    async function startApp() {
+        $('auth-card').classList.add('hidden');
+
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('user_id', currentSession.user.id)
+            .maybeSingle();
+
+        if (error) {
+            alert('Profil konnte nicht geladen werden: ' + error.message);
+            return;
+        }
+
+        profile = data;
+        if (!profile || !profile.kcal_goal) {
+            showOnboarding();
+        } else {
+            showDashboard();
         }
     }
 
-    sendBtn.addEventListener('click', async () => {
-        const text = foodInput.value.trim();
+    // ---------- Onboarding / Zielberechnung ----------
+
+    function calcTargets({ kg, cm, age, sex, activity, goal, proteinPerKg }) {
+        const bmr = 10 * kg + 6.25 * cm - 5 * age + (sex === 'w' ? -161 : 5);
+        const tdee = bmr * ACTIVITY[activity];
+        let kcal = tdee + GOALS[goal].delta;
+        const floored = kcal < bmr;
+        if (floored) kcal = bmr; // nie unter den Grundumsatz
+        const perKg = Math.min(2.2, Math.max(1.6, proteinPerKg || GOALS[goal].protein));
+        return {
+            bmr: Math.round(bmr),
+            tdee: Math.round(tdee),
+            kcal: Math.round(kcal),
+            protein: Math.round(kg * perKg),
+            diff: Math.round(kcal) - Math.round(tdee),
+            floored
+        };
+    }
+
+    function readOnboarding() {
+        return {
+            kg: num($('ob-weight').value),
+            cm: num($('ob-height').value),
+            age: num($('ob-age').value),
+            sex: $('ob-sex').value,
+            activity: $('ob-activity').value,
+            goal: $('ob-goal').value,
+            proteinPerKg: num($('ob-protein').value)
+        };
+    }
+
+    function updateOnboardingResult() {
+        const input = readOnboarding();
+        const box = $('ob-result');
+
+        if (!input.kg || !input.cm || !input.age) {
+            box.innerHTML = '<div class="result-hint">Bitte Gewicht, Größe und Alter eingeben.</div>';
+            return null;
+        }
+
+        const t = calcTargets(input);
+        let diffText = 'Erhaltung (kein Defizit)';
+        if (t.diff < 0) diffText = `Defizit ${fmt(-t.diff)} kcal/Tag`;
+        if (t.diff > 0) diffText = `Überschuss ${fmt(t.diff)} kcal/Tag`;
+
+        box.innerHTML = `
+            <div class="result-line"><span>Grundumsatz</span><span>${fmt(t.bmr)} kcal</span></div>
+            <div class="result-line"><span>Gesamtumsatz</span><span>${fmt(t.tdee)} kcal</span></div>
+            <div class="result-line"><span>Tagesziel</span><b>${fmt(t.kcal)} kcal</b></div>
+            <div class="result-line"><span>Eiweißziel</span><b>${fmt(t.protein)} g</b></div>
+            <div class="result-hint">${diffText}${t.floored ? ' – auf Grundumsatz begrenzt' : ''}</div>
+        `;
+        return t;
+    }
+
+    function showOnboarding() {
+        if (profile) {
+            $('ob-weight').value = profile.weight_kg ?? '';
+            $('ob-height').value = profile.height_cm ?? '';
+            $('ob-age').value = profile.age ?? '';
+            $('ob-sex').value = profile.sex || 'm';
+            $('ob-activity').value = profile.activity in ACTIVITY ? profile.activity : 'maessig';
+            $('ob-goal').value = profile.goal in GOALS ? profile.goal : 'abnehmen';
+            const perKg = profile.weight_kg && profile.protein_goal
+                ? profile.protein_goal / profile.weight_kg
+                : GOALS[$('ob-goal').value].protein;
+            $('ob-protein').value = (Math.round(perKg * 10) / 10).toFixed(1);
+        } else {
+            $('ob-protein').value = GOALS[$('ob-goal').value].protein.toFixed(1);
+        }
+
+        $('ob-cancel-btn').classList.toggle('hidden', !profile || !profile.kcal_goal);
+        $('app').classList.add('hidden');
+        $('chat-footer').classList.add('hidden');
+        $('onboarding').classList.remove('hidden');
+        updateOnboardingResult();
+    }
+
+    $('onboarding').addEventListener('input', updateOnboardingResult);
+
+    $('ob-goal').addEventListener('change', () => {
+        $('ob-protein').value = GOALS[$('ob-goal').value].protein.toFixed(1);
+        updateOnboardingResult();
+    });
+
+    $('ob-cancel-btn').addEventListener('click', showDashboard);
+    $('settings-btn').addEventListener('click', showOnboarding);
+
+    $('onboarding').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const input = readOnboarding();
+        const t = updateOnboardingResult();
+        if (!t) {
+            alert('Bitte Gewicht, Größe und Alter eingeben.');
+            return;
+        }
+
+        const row = {
+            user_id: currentSession.user.id,
+            weight_kg: input.kg,
+            height_cm: input.cm,
+            age: Math.round(input.age),
+            sex: input.sex,
+            activity: input.activity,
+            goal: input.goal,
+            kcal_goal: t.kcal,
+            protein_goal: t.protein
+        };
+
+        $('ob-save-btn').disabled = true;
+        const { data, error } = await supabase.from('profiles').upsert(row).select().single();
+        if (!error) {
+            // Gewicht auch im Verlauf speichern (ein Wert pro Tag)
+            await supabase.from('weights').upsert({ user_id: currentSession.user.id, day: todayStr(), kg: input.kg });
+        }
+        $('ob-save-btn').disabled = false;
+
+        if (error) {
+            alert('Ziele konnten nicht gespeichert werden: ' + error.message);
+            return;
+        }
+
+        profile = data;
+        showDashboard();
+    });
+
+    // ---------- Dashboard ----------
+
+    function showDashboard() {
+        $('onboarding').classList.add('hidden');
+        $('app').classList.remove('hidden');
+        $('chat-footer').classList.remove('hidden');
+        loadDay();
+    }
+
+    $('prev-day-btn').addEventListener('click', () => changeDay(addDays(currentDay, -1)));
+    $('next-day-btn').addEventListener('click', () => changeDay(addDays(currentDay, 1)));
+
+    function changeDay(day) {
+        if (day > todayStr()) return;
+        currentDay = day;
+        hidePreview();
+        closeEntryForm();
+        loadDay();
+    }
+
+    async function loadDay() {
+        if (!currentSession) return;
+
+        $('day-label').innerText = dayLabel(currentDay);
+        $('next-day-btn').disabled = currentDay >= todayStr();
+
+        const { data, error } = await supabase
+            .from('entries')
+            .select('*')
+            .eq('user_id', currentSession.user.id)
+            .eq('day', currentDay)
+            .order('created_at', { ascending: true });
+
+        if (error) {
+            console.error('Fehler beim Laden:', error.message);
+            alert('Einträge konnten nicht geladen werden.');
+            return;
+        }
+
+        localEntries = data || [];
+        renderEntries();
+        renderSummary();
+        loadWeek();
+    }
+
+    function renderSummary() {
+        const total = localEntries.reduce((sum, e) => ({
+            kcal: sum.kcal + Number(e.kcal || 0),
+            protein: sum.protein + Number(e.protein_g || 0),
+            carbs: sum.carbs + Number(e.carbs_g || 0),
+            fat: sum.fat + Number(e.fat_g || 0)
+        }), { kcal: 0, protein: 0, carbs: 0, fat: 0 });
+
+        const kcalGoal = profile?.kcal_goal || 0;
+        const proteinGoal = profile?.protein_goal || 0;
+        const ratio = kcalGoal ? Math.min(total.kcal / kcalGoal, 1) : 0;
+        const over = kcalGoal && total.kcal > kcalGoal;
+
+        $('ring-bar').style.strokeDashoffset = RING_LEN * (1 - ratio);
+        $('ring-bar').classList.toggle('over', !!over);
+        $('ring-val').textContent = fmt(total.kcal);
+        $('ring-goal').textContent = `/ ${fmt(kcalGoal)} kcal`;
+
+        const remaining = $('kcal-remaining');
+        remaining.classList.toggle('over', !!over);
+        remaining.innerText = over
+            ? `${fmt(total.kcal - kcalGoal)} kcal über Ziel`
+            : `Noch ${fmt(kcalGoal - total.kcal)} kcal`;
+
+        $('protein-text').innerText = `${fmt(total.protein)} / ${fmt(proteinGoal)} g`;
+        $('protein-fill').style.width = proteinGoal ? `${Math.min(total.protein / proteinGoal, 1) * 100}%` : '0%';
+        $('macros-text').innerText = `KH ${fmt(total.carbs)} g · Fett ${fmt(total.fat)} g`;
+    }
+
+    // ---------- Einträge ----------
+
+    function renderEntries() {
+        const list = $('entries-list');
+
+        if (localEntries.length === 0) {
+            list.innerHTML = '<p class="sub-text" style="margin: 8px 0 0;">Keine Einträge vorhanden.</p>';
+            return;
+        }
+
+        list.innerHTML = localEntries.map(entry => `
+            <div class="entry-item">
+                <div class="entry-main">
+                    <div class="entry-name">${esc(entry.name)}</div>
+                    <div class="entry-meta">
+                        ${entry.amount ? esc(entry.amount) + ' · ' : ''}${fmt(entry.protein_g)} g Eiweiß${SOURCE_LABEL[entry.source] ? ' · ' + SOURCE_LABEL[entry.source] : ''}
+                    </div>
+                </div>
+                <span class="entry-kcal">${fmt(entry.kcal)} kcal</span>
+                <button type="button" class="icon-btn" data-edit="${esc(entry.id)}" title="Ändern">✎</button>
+                <button type="button" class="icon-btn" data-delete="${esc(entry.id)}" title="Löschen">✕</button>
+            </div>
+        `).join('');
+    }
+
+    $('entries-list').addEventListener('click', (event) => {
+        const editBtn = event.target.closest('[data-edit]');
+        const deleteBtn = event.target.closest('[data-delete]');
+        if (editBtn) openEntryForm(localEntries.find(e => String(e.id) === editBtn.dataset.edit));
+        if (deleteBtn) deleteEntry(deleteBtn.dataset.delete);
+    });
+
+    $('add-entry-btn').addEventListener('click', () => openEntryForm(null));
+    $('f-cancel-btn').addEventListener('click', closeEntryForm);
+
+    function openEntryForm(entry) {
+        editingId = entry ? entry.id : null;
+        const grams = entry ? Number(entry.grams) || gramsFromAmount(entry.amount) : 0;
+        $('f-name').value = entry?.name || '';
+        $('f-grams').value = grams || '';
+        $('f-kcal').value = entry ? entry.kcal : '';
+        $('f-protein').value = entry ? Number(entry.protein_g) : '';
+        $('f-carbs').value = entry ? Number(entry.carbs_g) : '';
+        $('f-fat').value = entry ? Number(entry.fat_g) : '';
+        // Mengentext ("2 Stück (≈ 240 g)") behalten, solange die Grammzahl gleich bleibt
+        $('entry-form').dataset.amount = entry?.amount || '';
+        $('entry-form').dataset.grams = grams || '';
+        setScaleBase($('entry-form'));
+        $('entry-form').classList.remove('hidden');
+        $('f-name').focus();
+    }
+
+    function amountText(grams, originalGrams, originalAmount) {
+        if (!grams) return originalAmount || null;
+        if (grams === Number(originalGrams) && originalAmount) return originalAmount;
+        return `${String(grams).replace('.', ',')} g`;
+    }
+
+    $('entry-form').addEventListener('input', onScaleInput);
+    $('preview-list').addEventListener('input', onScaleInput);
+
+    function closeEntryForm() {
+        editingId = null;
+        $('entry-form').reset();
+        $('entry-form').classList.add('hidden');
+    }
+
+    $('entry-form').addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const name = $('f-name').value.trim();
+        if (!name) {
+            alert('Bitte einen Namen eingeben.');
+            return;
+        }
+
+        const grams = num($('f-grams').value);
+        const row = {
+            name,
+            grams: grams || null,
+            amount: amountText(grams, $('entry-form').dataset.grams, $('entry-form').dataset.amount),
+            kcal: Math.round(num($('f-kcal').value)),
+            protein_g: num($('f-protein').value),
+            carbs_g: num($('f-carbs').value),
+            fat_g: num($('f-fat').value)
+        };
+
+        $('f-save-btn').disabled = true;
+        const { error } = editingId
+            ? await supabase.from('entries').update(row).eq('id', editingId)
+            : await supabase.from('entries').insert({
+                ...row, user_id: currentSession.user.id, day: currentDay, source: 'manual'
+            });
+        $('f-save-btn').disabled = false;
+
+        if (error) {
+            alert('Speichern fehlgeschlagen: ' + error.message);
+            return;
+        }
+
+        closeEntryForm();
+        loadDay();
+    });
+
+    async function deleteEntry(id) {
+        if (!confirm('Eintrag löschen?')) return;
+
+        const { error } = await supabase.from('entries').delete().eq('id', id);
+        if (error) {
+            alert('Löschen fehlgeschlagen: ' + error.message);
+            return;
+        }
+
+        if (String(editingId) === String(id)) closeEntryForm();
+        loadDay();
+    }
+
+    // ---------- 7-Tage-Chart ----------
+
+    async function loadWeek() {
+        const start = addDays(currentDay, -6);
+        const { data, error } = await supabase
+            .from('entries')
+            .select('day, kcal')
+            .eq('user_id', currentSession.user.id)
+            .gte('day', start)
+            .lte('day', currentDay);
+
+        if (error) {
+            console.error('7-Tage-Daten:', error.message);
+            return;
+        }
+
+        const days = [];
+        for (let i = 0; i < 7; i++) days.push({ day: addDays(start, i), kcal: 0 });
+        (data || []).forEach(row => {
+            const d = days.find(x => x.day === row.day);
+            if (d) d.kcal += Number(row.kcal || 0);
+        });
+        renderWeek(days);
+    }
+
+    function renderWeek(days) {
+        const goal = profile?.kcal_goal || 0;
+        const W = 320, H = 150, top = 16, bottom = 22;
+        const plotH = H - top - bottom;
+        const max = Math.max(goal * 1.15, ...days.map(d => d.kcal), 1);
+        const slot = W / days.length;
+        const barW = slot * 0.55;
+        const y = v => top + plotH - (v / max) * plotH;
+
+        let svg = '';
+        days.forEach((d, i) => {
+            const x = i * slot + (slot - barW) / 2;
+            const h = Math.max((d.kcal / max) * plotH, d.kcal > 0 ? 2 : 0);
+            const cls = ['chart-bar'];
+            if (goal && d.kcal > goal) cls.push('over');
+            if (d.day !== currentDay) cls.push('dim');
+            const wd = parseDay(d.day).toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '');
+            svg += `<rect class="${cls.join(' ')}" data-day="${d.day}" x="${x}" y="${top + plotH - h}" width="${barW}" height="${h}" rx="3"><title>${dayLabel(d.day)}: ${fmt(d.kcal)} kcal</title></rect>`;
+            if (d.kcal > 0) svg += `<text class="chart-val" x="${x + barW / 2}" y="${top + plotH - h - 4}" text-anchor="middle">${fmt(d.kcal)}</text>`;
+            svg += `<text class="chart-label${d.day === currentDay ? ' sel' : ''}" x="${x + barW / 2}" y="${H - 6}" text-anchor="middle">${wd}</text>`;
+        });
+        if (goal) svg += `<line class="chart-goal" x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}"></line>`;
+        $('week-chart').innerHTML = svg;
+
+        const logged = days.filter(d => d.kcal > 0);
+        $('week-avg').innerText = logged.length
+            ? `Ø ${fmt(logged.reduce((s, d) => s + d.kcal, 0) / logged.length)} kcal an ${logged.length} Tag${logged.length > 1 ? 'en' : ''} · Linie = Ziel`
+            : 'Noch keine Daten in diesem Zeitraum.';
+    }
+
+    $('week-chart').addEventListener('click', (event) => {
+        const bar = event.target.closest('[data-day]');
+        if (bar) changeDay(bar.dataset.day);
+    });
+
+    // ---------- KI-Eingabe (Chatleiste) ----------
+
+    const ANALYZE_TIMEOUT_MS = 100000;
+    let analyzeSeq = 0;      // jede Anfrage bekommt eine Nummer; Abbrechen = Antwort ignorieren
+    let lastPayload = null;
+    let statusTimer = null;
+
+    // Edge Function aufrufen (sendet automatisch das Login-Token mit)
+    async function processWithGemini(payload) {
+        const timeout = new Promise((_, reject) => setTimeout(
+            () => reject(new Error('Keine Antwort nach 100 Sekunden. Bitte nochmal versuchen.')), ANALYZE_TIMEOUT_MS));
+        const { data, error } = await Promise.race([
+            supabase.functions.invoke('estimate', { body: payload }),
+            timeout
+        ]);
+        if (error) {
+            // Fehlermeldung der Function aus der Antwort lesen, falls vorhanden
+            let message = error.message;
+            try {
+                const body = await error.context.json();
+                if (body.error) message = body.error;
+            } catch (e) {}
+            if (message === 'Nicht angemeldet.') message = 'Sitzung abgelaufen. Bitte ab- und wieder anmelden.';
+            throw new Error(message);
+        }
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function showStatus(text, isError) {
+        $('status-card').classList.remove('hidden');
+        $('status-card').classList.toggle('error', !!isError);
+        $('status-text').innerText = text;
+        $('status-retry-btn').classList.toggle('hidden', !isError);
+        $('status-cancel-btn').innerText = isError ? 'Schließen' : 'Abbrechen';
+    }
+
+    function hideStatus() {
+        clearInterval(statusTimer);
+        $('status-card').classList.add('hidden');
+    }
+
+    async function analyze(payload) {
+        const seq = ++analyzeSeq;
+        lastPayload = payload;
+        hidePreview();
+
+        const started = Date.now();
+        const tick = () => {
+            const s = Math.round((Date.now() - started) / 1000);
+            showStatus(s < 15 ? `Analysiere … ${s} s` : `Analysiere … ${s} s – die KI braucht gerade länger`);
+        };
+        tick();
+        clearInterval(statusTimer);
+        statusTimer = setInterval(tick, 1000);
+        $('send-btn').disabled = true;
+
+        let result = null;
+        let errorMessage = '';
+        try {
+            result = await processWithGemini(payload);
+        } catch (err) {
+            errorMessage = err.message;
+        }
+
+        if (seq !== analyzeSeq) return; // inzwischen abgebrochen oder neu gestartet
+        clearInterval(statusTimer);
+        $('send-btn').disabled = false;
+
+        if (errorMessage) {
+            showStatus(errorMessage, true);
+        } else if (!result.items || result.items.length === 0) {
+            showStatus('Keine Lebensmittel erkannt. Formuliere es etwas genauer.', true);
+        } else {
+            hideStatus();
+            showPreview(result.items, result.sources || [], result);
+        }
+    }
+
+    $('status-cancel-btn').addEventListener('click', () => {
+        analyzeSeq++;
+        hideStatus();
+        $('send-btn').disabled = false;
+    });
+
+    $('status-retry-btn').addEventListener('click', () => {
+        if (lastPayload) analyze(lastPayload);
+    });
+
+    $('image-input').addEventListener('change', () => {
+        $('photo-btn').classList.toggle('has-file', $('image-input').files.length > 0);
+    });
+
+    $('send-btn').addEventListener('click', async () => {
+        if ($('send-btn').disabled) return;
+        const imageInput = $('image-input');
+        const text = $('food-input').value.trim();
         let imagePayload = null;
 
         if (imageInput.files && imageInput.files[0]) {
@@ -269,18 +1101,13 @@ loginBtn.addEventListener('click', async () => {
         }
 
         if (!text && !imagePayload) return;
+        analyze({ text, image: imagePayload });
+    });
 
-        sendBtn.innerText = 'Analysiere...';
-        const items = await processWithGemini({ text, image: imagePayload });
-        sendBtn.innerText = 'Senden';
-
-        if (items.length > 0) {
-            items.forEach(item => {
-                localEntries.push(item);
-            });
-            foodInput.value = '';
-            imageInput.value = '';
-            renderEntries();
+    $('food-input').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            $('send-btn').click();
         }
     });
 
@@ -293,37 +1120,87 @@ loginBtn.addEventListener('click', async () => {
         });
     }
 
-    function renderEntries() {
-        if (localEntries.length === 0) {
-            entriesList.innerHTML = '<p class="sub-text">Keine Einträge vorhanden.</p>';
-            kcalCurrent.innerText = '0';
-            proteinCurrent.innerText = '0';
+    // Vorschau: nichts wird ohne Bestätigung gespeichert
+    function showPreview(items, sources, info = {}) {
+        const calls = info.ai_calls ?? null;
+        $('preview-meta').innerText = calls === null ? '' :
+            `(${calls === 0 ? 'ohne KI' : calls === 1 ? '1 KI-Aufruf' : calls + ' KI-Aufrufe'}` +
+            `${info.ms ? ', ' + (info.ms / 1000).toFixed(1).replace('.', ',') + ' s' : ''})`;
+        $('preview-list').innerHTML = items.map(item => `
+            <div class="preview-item" data-scale data-amount="${esc(item.amount)}" data-source="${esc(item.source || 'ki')}"
+                 data-grams="${esc(item.grams || '')}">
+                <div class="preview-head">
+                    <div><label>Name</label><input type="text" data-field="name" value="${esc(item.name)}" placeholder="Name"></div>
+                    <div><label>Menge g/ml</label><input type="number" data-field="grams" inputmode="decimal" value="${esc(item.grams || '')}" placeholder="–"></div>
+                </div>
+                <div class="grid-4">
+                    <div><label>kcal</label><input type="number" data-field="kcal" inputmode="numeric" value="${esc(Math.round(Number(item.kcal) || 0))}"></div>
+                    <div><label>Eiweiß g</label><input type="number" step="0.1" data-field="protein_g" inputmode="decimal" value="${esc(Number(item.protein_g) || 0)}"></div>
+                    <div><label>KH g</label><input type="number" step="0.1" data-field="carbs_g" inputmode="decimal" value="${esc(Number(item.carbs_g) || 0)}"></div>
+                    <div><label>Fett g</label><input type="number" step="0.1" data-field="fat_g" inputmode="decimal" value="${esc(Number(item.fat_g) || 0)}"></div>
+                </div>
+                <div class="preview-note">
+                    <span class="badge ${esc(item.source)}">${esc(SOURCE_LABEL[item.source] || 'KI')}</span>
+                    ${esc(item.amount)}${item.note ? ' · ' + esc(item.note) : ''}${item.confidence && item.source !== 'tabelle' ? ` · Sicherheit: ${esc(item.confidence)}` : ''}
+                    ${/^https?:\/\//.test(item.source_url || '') ? ` · <a href="${esc(item.source_url)}" target="_blank" rel="noopener">Produkt ansehen</a>` : ''}
+                </div>
+            </div>
+        `).join('');
+        $('preview-list').querySelectorAll('[data-scale]').forEach(setScaleBase);
+
+        $('preview-sources').innerHTML = sources
+            .filter(s => /^https?:\/\//.test(s.url || ''))
+            .map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title || s.url)}</a>`)
+            .join('');
+
+        $('preview-card').classList.remove('hidden');
+        $('preview-card').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function hidePreview() {
+        $('preview-card').classList.add('hidden');
+        $('preview-list').innerHTML = '';
+        $('preview-sources').innerHTML = '';
+    }
+
+    $('preview-cancel-btn').addEventListener('click', hidePreview);
+
+
+    $('preview-save-btn').addEventListener('click', async () => {
+        const saveBtn = $('preview-save-btn');
+        const rows = [...$('preview-list').querySelectorAll('.preview-item')].map(el => {
+            const val = field => el.querySelector(`[data-field="${field}"]`).value;
+            const grams = num(val('grams'));
+            return {
+                user_id: currentSession.user.id,
+                day: currentDay,
+                name: val('name').trim() || 'Unbenannt',
+                grams: grams || null,
+                amount: amountText(grams, el.dataset.grams, el.dataset.amount),
+                kcal: Math.round(num(val('kcal'))),
+                protein_g: num(val('protein_g')),
+                carbs_g: num(val('carbs_g')),
+                fat_g: num(val('fat_g')),
+                source: el.dataset.source
+            };
+        });
+
+        saveBtn.disabled = true;
+        const { error } = await supabase.from('entries').insert(rows);
+        saveBtn.disabled = false;
+
+        if (error) {
+            console.error('Speichern fehlgeschlagen:', error.message);
+            alert('Mahlzeiten konnten nicht gespeichert werden: ' + error.message);
             return;
         }
 
-        let totalKcal = 0;
-        let totalProtein = 0;
-        let html = '';
-
-        localEntries.forEach((entry, index) => {
-            totalKcal += Number(entry.kcal || 0);
-            totalProtein += Number(entry.protein_g || 0);
-            html += `
-                <div class="entry-item">
-                    <span><b>${entry.name}</b> (${entry.amount})</span>
-                    <span>${entry.kcal} kcal | ${entry.protein_g}g P</span>
-                </div>
-            `;
-        });
-
-        entriesList.innerHTML = html;
-        kcalCurrent.innerText = totalKcal;
-        proteinCurrent.innerText = totalProtein;
-    }
-
-    function loadEntries() {
-        renderEntries();
-    }
+        $('food-input').value = '';
+        $('image-input').value = '';
+        $('photo-btn').classList.remove('has-file');
+        hidePreview();
+        loadDay();
+    });
 </script>
 
 </body>
