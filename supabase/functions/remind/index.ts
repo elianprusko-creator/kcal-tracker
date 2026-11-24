@@ -44,7 +44,7 @@ webpush.setVapidDetails(
 type Sub = { endpoint: string; user_id: string; p256dh: string; auth: string };
 type MealSlot = { time: string; meal: string; label: string; on?: boolean };
 type Settings = { wake?: string; sleep?: string; meals?: MealSlot[]; water?: { on?: boolean; every?: number } };
-type Msg = { title: string; body: string; tag: string };
+type Msg = { title: string; body: string; tag: string; url?: string };
 
 async function sendTo(subs: Sub[], msg: Msg) {
   let sent = 0;
@@ -53,7 +53,7 @@ async function sendTo(subs: Sub[], msg: Msg) {
     try {
       await webpush.sendNotification(
         { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-        JSON.stringify({ ...msg, url: "./" }),
+        JSON.stringify({ url: "./", ...msg }),
         { TTL: 30 * 60, urgency: "high" },
       );
       sent++;
@@ -169,7 +169,8 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
           }
         }
       } catch { /* Reste sind nur ein Zusatz */ }
-      msgs.push({ title: `🍽️ Zeit für: ${dueMeal.label}`, body, tag: `meal-${day}-${dueMeal.time}` });
+      // Tippen öffnet in der App "Was soll ich essen?" (nur mit KI sichtbar, sonst einfach die App)
+      msgs.push({ title: `🍽️ Zeit für: ${dueMeal.label}`, body, tag: `meal-${day}-${dueMeal.time}`, url: "./?ideen=1" });
     }
   }
 

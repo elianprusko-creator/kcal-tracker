@@ -1,7 +1,7 @@
 // Offline-Modus: App-Dateien zwischenspeichern, damit die App auch ohne Netz startet.
 // Daten (Supabase, Open Food Facts, KI) laufen NICHT über diesen Cache.
 // Nach Änderungen an dieser Datei die Versionsnummer erhöhen.
-const CACHE = 'kcal-v2';
+const CACHE = 'kcal-v3';
 const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 const CDN = [
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
@@ -86,7 +86,12 @@ self.addEventListener('notificationclick', (event) => {
     event.waitUntil((async () => {
         const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
         const open = list.find(c => c.url.startsWith(self.registration.scope));
-        if (open) return open.focus();
+        if (open) {
+            await open.focus();
+            // Essens-Erinnerung: in der offenen App direkt die Essensideen zeigen
+            if (url.includes('ideen=1')) open.postMessage({ open: 'ideas' });
+            return;
+        }
         return clients.openWindow(url);
     })());
 });

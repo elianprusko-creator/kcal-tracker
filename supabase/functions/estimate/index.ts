@@ -220,6 +220,76 @@ async function gemini(parts: unknown[], opts: GeminiOpts): Promise<{ json: any; 
   }
 }
 
+// ---------- Beratung: "Was soll ich jetzt essen?" und Speisekarte ----------
+// Ton bewusst neutral: keine Verbote, keine Wertung, kein schlechtes Gewissen (Essstörungen vorbeugen).
+
+const ADVICE_RULES = `Ton: freundlich, sachlich, ohne Moral. Keine Verbote, keine Begriffe wie "Sünde", "schlecht", "verdient",
+"Cheat", kein schlechtes Gewissen. Nie zu sehr wenig Essen raten. Ist das Kalorienziel schon erreicht und jemand hat Hunger,
+dann eine leichte, sättigende, eiweißreiche Option vorschlagen – sachlich, ohne Vorwurf.
+Training: 1–3 h vorher leicht verdaulich und kohlenhydratbetont (wenig Fett und Ballaststoffe); danach Eiweiß plus Kohlenhydrate.
+Ist noch viel Eiweiß offen, eiweißreiche Optionen bevorzugen. Nährwerte realistisch schätzen, inkl. Öl/Soße.`;
+
+const SUGGEST_PROMPT = `Du bist ein Ernährungscoach. Schlage genau 3 konkrete Mahlzeiten oder Snacks für JETZT vor, passend zum Kontext (JSON unten).
+Richtwert pro Vorschlag: die offenen Werte geteilt durch die heute noch übrigen Mahlzeiten (mahlzeiten_uebrig).
+Bevorzuge, was die Person ohnehin isst (haeufig) und was im Kühlschrank steht (reste, ganz oder als Portion);
+mindestens ein Vorschlag mit Resten, falls welche passen. Sonst schnell zubereitet (unter 15 Minuten) oder unterwegs kaufbar.
+${ADVICE_RULES}
+Antwort als JSON: {"suggestions":[{"title":"kurzer Name","why":"ein kurzer Satz, warum es gerade passt",
+"items":[{"name":"","amount":"z. B. 1 Portion / 200 g","grams":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}]}]}`;
+
+const MENU_PROMPT = `Du bist ein Ernährungscoach. Auf dem Bild ist eine Speisekarte. Lies alle Gerichte und wähle die 3, die am besten
+zu Ziel und offenen Werten der Person passen (Kontext-JSON unten). Schätze die Nährwerte einer üblichen Restaurantportion
+(inkl. Öl, Soße, Beilage). Gib zu jedem einen kurzen Grund und optional einen praktischen Tipp (z. B. "Soße extra",
+"Pommes gegen Salat tauschen", "halbe Portion Reis").
+Ist keine Speisekarte erkennbar, gib leere picks und schreibe das in note.
+${ADVICE_RULES}
+Antwort als JSON: {"picks":[{"name":"Name wie auf der Karte","why":"","tip":"","grams":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}],
+"note":"kurz, optional"}`;
+
+type AdviceReq = { context?: Record<string, unknown>; image?: { mime: string; data: string } };
+
+function cleanAdviceItem(i: Record<string, unknown>) {
+  return {
+    name: String(i?.name || "").slice(0, 80) || "Gericht",
+    amount: String(i?.amount || "").slice(0, 40),
+    grams: r1(i?.grams) || null,
+    kcal: Math.round(Number(i?.kcal) || 0),
+    protein_g: r1(i?.protein_g),
+    carbs_g: r1(i?.carbs_g),
+    fat_g: r1(i?.fat_g),
+  };
+}
+
+async function suggest(req: AdviceReq, key: string | null) {
+  const res = await gemini([{ text: `${SUGGEST_PROMPT}\n\nKontext: ${JSON.stringify(req.context || {})}` }], { key, timeoutMs: 25000 });
+  const list = Array.isArray(res.json.suggestions) ? res.json.suggestions : [];
+  return {
+    suggestions: list.slice(0, 3).map((s: Record<string, unknown>) => ({
+      title: String(s?.title || "Vorschlag").slice(0, 80),
+      why: String(s?.why || "").slice(0, 200),
+      items: (Array.isArray(s?.items) ? s.items : []).slice(0, 6).map(cleanAdviceItem),
+    })).filter((s: { items: unknown[] }) => s.items.length),
+  };
+}
+
+async function menu(req: AdviceReq, key: string | null) {
+  if (!req.image?.data) throw new Error("Kein Foto der Speisekarte.");
+  const parts = [
+    { text: `${MENU_PROMPT}\n\nKontext: ${JSON.stringify(req.context || {})}` },
+    { inline_data: { mime_type: req.image.mime || "image/jpeg", data: req.image.data } },
+  ];
+  const res = await gemini(parts, { key, timeoutMs: 30000 });
+  const picks = Array.isArray(res.json.picks) ? res.json.picks : [];
+  return {
+    picks: picks.slice(0, 3).map((p: Record<string, unknown>) => ({
+      ...cleanAdviceItem(p),
+      why: String(p?.why || "").slice(0, 200),
+      tip: String(p?.tip || "").slice(0, 160),
+    })),
+    note: String(res.json.note || "").slice(0, 200),
+  };
+}
+
 // ---------- Barcode-Produkte ----------
 
 const PORTION_RULES = `Mengen-Auswahl (portions): 3–5 sinnvolle Mengen, wie man genau dieses Produkt typischerweise isst/trinkt,
@@ -402,6 +472,8 @@ Deno.serve(async (req) => {
       return out(r.ok || r.status === 429 ? { ok: true } : { ok: false, error: "Schlüssel ungültig." });
     }
     if (body.product) return out({ ...(await product(body.product, key)), ms: Date.now() - started });
+    if (body.suggest) return out({ ...(await suggest(body.suggest, key)), ms: Date.now() - started });
+    if (body.menu) return out({ ...(await menu(body.menu, key)), ms: Date.now() - started });
     const { text, image } = body;
     if (!text && !image) return out({ error: "Leere Eingabe." });
 

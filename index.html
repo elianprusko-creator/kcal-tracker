@@ -323,6 +323,38 @@
         .ai-privacy { border-top: 1px solid var(--border); padding-top: 10px; font-size: 14px; }
         .link-btn { background: none; border: none; color: var(--danger); font-size: 13px; padding: 6px 0; cursor: pointer; }
         .tip-card { border: 1px solid var(--accent); }
+        /* Nur mit KI sichtbar */
+        body.no-ai .ai-only { display: none !important; }
+        .ideas-btn { width: 100%; }
+        .idea { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+        .idea-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+        .idea-title { font-weight: 700; }
+        .idea-why, .idea-items { font-size: 13px; color: var(--mute); margin-top: 3px; }
+        .idea-tip { font-size: 13px; margin-top: 4px; }
+        .idea .btn { margin-top: 8px; width: auto; }
+        .ideas-loading { display: flex; gap: 10px; align-items: center; margin-top: 14px; font-size: 14px; color: var(--mute); }
+        .welcome-list { padding-left: 18px; margin: 0; font-size: 14px; }
+        .welcome-list li { margin: 6px 0; }
+        .welcome-unlock { border: 1px solid var(--accent); border-radius: 10px; padding: 10px 12px; margin-top: 12px; font-size: 14px; }
+        .welcome-unlock p { margin: 6px 0; color: var(--mute); font-size: 13px; }
+        .welcome-unlock ul { margin: 4px 0; padding-left: 18px; font-size: 13px; }
+        /* Ziel, das mitlernt */
+        .adapt-body { font-size: 14px; }
+        .adapt-big { font-size: 22px; font-weight: 700; }
+        .adapt-rec { background: var(--field); border-radius: 10px; padding: 10px 12px; margin-top: 10px; }
+        .adapt-rec.warn { border: 1px solid var(--warn); }
+        .adapt-progress { height: 6px; background: var(--track); border-radius: 3px; overflow: hidden; margin: 8px 0 4px; }
+        .adapt-progress span { display: block; height: 100%; background: var(--accent); }
+        .switch { position: relative; display: inline-block; width: 40px; height: 22px; flex-shrink: 0; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .switch span { position: absolute; inset: 0; background: var(--track); border-radius: 11px; cursor: pointer; transition: background 0.2s; }
+        .switch span::before { content: ''; position: absolute; width: 16px; height: 16px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform 0.2s; }
+        .switch input:checked + span { background: var(--accent); }
+        .switch input:checked + span::before { transform: translateX(18px); }
+        /* Spracheingabe */
+        .send-btn.mic { font-size: 18px; padding: 10px 16px; }
+        .send-btn.listening { background: var(--danger); animation: pulse 1s ease-in-out infinite; }
+        @keyframes pulse { 50% { opacity: 0.6; } }
         /* Reiter */
         .tabs { display: flex; gap: 4px; background: var(--field); border-radius: 10px; padding: 4px; position: sticky; top: 0; z-index: 50; }
         .tabs button { flex: 1; background: none; border: none; color: var(--mute); padding: 8px 4px; font: inherit; font-size: 14px;
@@ -512,6 +544,18 @@
         </div>
 
         <!-- Schnell eintragen -->
+        <button type="button" class="btn btn-sec ideas-btn ai-only" id="ideas-btn">💡 Was soll ich jetzt essen?</button>
+
+        <!-- Ziel, das mitlernt: Hinweis, wenn eine Anpassung empfohlen wird -->
+        <div class="card tip-card hidden" id="adapt-tip-card">
+            <b id="adapt-tip-title">📈 Dein Ziel braucht evtl. ein Update</b>
+            <p class="preview-note" id="adapt-tip-text" style="margin: 6px 0 10px;"></p>
+            <div class="row">
+                <button type="button" class="btn btn-small" id="adapt-tip-open">Ansehen</button>
+                <button type="button" class="btn btn-small btn-sec" id="adapt-tip-later">Später</button>
+            </div>
+        </div>
+
         <!-- Küche: Reste im Kühlschrank (nur wenn eingeschaltet) -->
         <div class="card hidden" id="fridge-card" style="padding: 12px 14px;">
             <div class="card-head"><h3 style="margin: 0;">🍲 Im Kühlschrank</h3></div>
@@ -631,6 +675,20 @@
             <svg class="chart" id="week-chart" viewBox="0 0 320 150"></svg>
             <div class="chart-avg" id="week-avg"></div>
             <div class="stat-grid" id="stat-grid"></div>
+        </div>
+
+        <!-- Ziel, das mitlernt -->
+        <div class="card" id="adapt-card">
+            <div class="card-head">
+                <h3>Dein echter Verbrauch</h3>
+                <label class="switch" title="Ziel regelmäßig prüfen"><input type="checkbox" id="adapt-on"><span></span></label>
+            </div>
+            <div id="adapt-body" class="adapt-body"></div>
+            <details class="ai-guide" style="margin-bottom: 0;">
+                <summary>Wie funktioniert das?</summary>
+                <p>Die Startwerte kommen aus einer Formel – die liegt bei vielen Menschen ein paar hundert kcal daneben. Die App vergleicht deshalb, was du in den letzten Wochen gegessen hast, mit deinem Gewichtsverlauf, und rechnet daraus deinen echten Tagesverbrauch aus.</p>
+                <p>Vorschläge kommen frühestens nach 2 Wochen, ändern das Ziel höchstens um 300 kcal auf einmal, gehen nie unter deinen Grundumsatz und gelten erst, wenn du sie bestätigst. Je vollständiger du einträgst und je regelmäßiger du dich wiegst (1–2× pro Woche, morgens), desto genauer.</p>
+            </details>
         </div>
 
         <!-- Gewicht -->
@@ -828,6 +886,56 @@
     </div>
 </main>
 
+<!-- Was soll ich essen? / Speisekarte -->
+<div class="sheet hidden" id="ideas-sheet" role="dialog" aria-modal="true" aria-labelledby="ideas-title">
+    <div class="sheet-box card">
+        <div class="card-head">
+            <h3 id="ideas-title" style="margin: 0;">💡 Was soll ich essen?</h3>
+            <button class="icon-btn" id="ideas-close-btn" title="Schließen">✕</button>
+        </div>
+        <p class="preview-note" id="ideas-context" style="margin: 8px 0 10px;"></p>
+        <label style="margin: 0 0 6px;">Training heute?</label>
+        <div class="chips" id="ideas-training">
+            <button type="button" class="chip" data-training="gleich">In 1–3 h</button>
+            <button type="button" class="chip" data-training="vorhin">Gerade vorbei</button>
+            <button type="button" class="chip active" data-training="">Nicht relevant</button>
+        </div>
+        <div class="row" style="margin-top: 4px;">
+            <button type="button" class="btn" id="ideas-go-btn">Vorschläge holen</button>
+            <label for="menu-input" class="btn btn-sec" style="text-align: center;">📋 Speisekarte</label>
+        </div>
+        <div id="ideas-results"></div>
+    </div>
+</div>
+
+<!-- Willkommen (nur beim ersten Mal) -->
+<div class="sheet hidden" id="welcome-sheet" role="dialog" aria-modal="true" aria-labelledby="welcome-title">
+    <div class="sheet-box card">
+        <h2 id="welcome-title" style="margin: 0 0 6px;">Willkommen! 👋</h2>
+        <p class="sub-text" style="margin: 0 0 12px;">Dein Ziel ist eingerichtet. So funktioniert die App:</p>
+        <ul class="welcome-list">
+            <li><b>Eintragen</b> – unten Lebensmittel suchen, Barcode scannen oder ein Gericht antippen, das du schon mal hattest.</li>
+            <li><b>Dein Tag</b> – der Ring zeigt, wie viel noch offen ist; dazu Eiweiß und Wasser.</li>
+            <li><b>Fortschritt</b> – Statistik, Gewicht und dein echter Verbrauch: Nach ein paar Wochen passt die App dein Ziel an das an, was dein Körper wirklich braucht.</li>
+            <li><b>Extras</b> – 🔔 oben für Erinnerungen, unter „Mehr“ z. B. die Küche für Rezepte und Reste. Alles freiwillig.</li>
+        </ul>
+        <div class="welcome-unlock hidden" id="welcome-unlock">
+            <b>🔓 Gerade nutzt du den Suchmodus</b>
+            <p>Mit einem kostenlosen KI-Schlüssel von Google schaltest du alles frei:</p>
+            <ul>
+                <li>Ganze Mahlzeiten hinschreiben oder einsprechen („Nudeln mit Hack und etwas Käse“) – die App rechnet alles aus</li>
+                <li>Essen und Nährwerttabellen fotografieren</li>
+                <li>„Was soll ich essen?“ und Speisekarten-Check</li>
+            </ul>
+            <p>Dauert etwa 2 Minuten, eine Anleitung ist dabei.</p>
+        </div>
+        <div class="row" style="margin-top: 14px;">
+            <button type="button" class="btn btn-sec" id="welcome-later-btn">Los geht's</button>
+            <button type="button" class="btn hidden" id="welcome-unlock-btn">KI freischalten</button>
+        </div>
+    </div>
+</div>
+
 <div class="toast hidden" id="toast" role="status">
     <span id="toast-text"></span>
     <button type="button" class="hidden" id="toast-action"></button>
@@ -841,12 +949,14 @@
         <div class="attach-menu hidden" id="attach-menu">
             <label for="camera-input">📷 Foto aufnehmen</label>
             <label for="image-input">🖼️ Aus Galerie wählen</label>
+            <label for="menu-input">📋 Speisekarte checken</label>
             <button type="button" class="hidden" id="photo-remove-btn">✕ Foto entfernen</button>
         </div>
         <div class="chat-container">
             <button type="button" class="btn photo-btn" id="photo-btn" title="Foto hinzufügen" aria-label="Foto hinzufügen">📷</button>
             <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
             <input type="file" id="image-input" accept="image/*" class="hidden">
+            <input type="file" id="menu-input" accept="image/*" capture="environment" class="hidden">
             <button class="btn photo-btn" id="scan-btn" title="Barcode scannen" aria-label="Barcode scannen">
                 <svg width="20" height="18" viewBox="0 0 20 18" fill="currentColor" aria-hidden="true">
                     <rect x="0" y="0" width="2" height="18"/><rect x="4" y="0" width="1" height="18"/><rect x="7" y="0" width="3" height="18"/>
@@ -1390,9 +1500,10 @@
             sex: input.sex,
             activity: input.activity,
             goal: input.goal,
-            kcal_goal: t.kcal,
+            kcal_goal: withAdaptOffset(t),
             protein_goal: t.protein
         };
+        const wasNew = !profile;
 
         $('ob-save-btn').disabled = true;
         const { data, error } = await supabase.from('profiles').upsert(row).select().single();
@@ -1409,8 +1520,9 @@
 
         profile = data;
         writeStore(userKey('profile'), profile);
-        loadWeights();
         showDashboard();
+        if (wasNew) setTimeout(openWelcome, 400);
+        else if (row.kcal_goal !== t.kcal) showToast(`Ziel: ${fmt(row.kcal_goal)} kcal – inkl. Anpassung an deinen echten Verbrauch`);
     });
 
     // ---------- Dashboard ----------
@@ -1421,7 +1533,11 @@
         $('chat-footer').classList.remove('hidden');
         showView('today');
         loadDay();
-        loadWeights();
+        loadWeights().then(refreshAdaptive);
+        if (/[?&]ideen=1/.test(location.search)) {
+            history.replaceState(null, '', location.pathname);
+            setTimeout(openIdeasFromNotification, 800);
+        }
         if (!suggestLoaded) loadSuggestData();
     }
 
@@ -2186,12 +2302,13 @@
                 kg, cm: Number(p.height_cm), age: Number(p.age), sex: p.sex,
                 activity: p.activity, goal: p.goal, proteinPerKg: perKg
             });
+            const kcalGoal = withAdaptOffset(t);
             const { data, error: e2 } = await supabase.from('profiles')
-                .update({ weight_kg: kg, kcal_goal: t.kcal, protein_goal: t.protein })
+                .update({ weight_kg: kg, kcal_goal: kcalGoal, protein_goal: t.protein })
                 .eq('user_id', uid).select().single();
             if (!e2 && data) {
-                if (t.kcal !== p.kcal_goal || t.protein !== p.protein_goal) {
-                    msg += ` · neues Ziel: ${fmt(t.kcal)} kcal, ${fmt(t.protein)} g Eiweiß`;
+                if (kcalGoal !== p.kcal_goal || t.protein !== p.protein_goal) {
+                    msg += ` · neues Ziel: ${fmt(kcalGoal)} kcal, ${fmt(t.protein)} g Eiweiß`;
                 }
                 profile = data;
                 writeStore(userKey('profile'), profile);
@@ -2349,6 +2466,7 @@
         currentView = view;
         document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
         document.querySelectorAll('#app .view').forEach(v => v.classList.toggle('hidden', v.dataset.view !== view));
+        if (view === 'progress' && currentSession) renderAdaptive();
         // Eingabeleiste gehört zu "Heute"; in den anderen Reitern stört sie nur
         $('chat-footer').classList.toggle('hidden', view !== 'today');
     }
@@ -2381,7 +2499,8 @@
             ? `<span class="mode-pill">✨ KI-Modus</span><span>${mode === 'own' ? 'dein Schlüssel' : ''}</span>`
             : `<span class="mode-pill">🔍 Suchmodus</span>`;
         $('food-input').placeholder = ai ? 'Was hast du gegessen?' : 'Lebensmittel suchen …';
-        $('send-btn').innerText = ai ? 'Senden' : 'Suchen';
+        document.body.classList.toggle('no-ai', !ai);
+        updateSendBtn();
         $('ai-tip-card').classList.toggle('hidden', ai || !!readStore(userKey('aiTipHidden'), false));
         // Besitzer nutzen den Schlüssel der App -> Karte nicht nötig
         $('ai-card').classList.toggle('hidden', mode === 'server');
@@ -2402,7 +2521,7 @@
 
     async function refreshAiMode() {
         if (ownAiKey()) return setAiMode('own');
-        const cached = readStore(userKey('aiMode'), 'server');
+        const cached = readStore(userKey('aiMode'), 'none');
         setAiMode(cached === 'own' ? 'server' : cached);
         try {
             const data = await processWithGemini({ status: true });
@@ -2566,6 +2685,8 @@
     $('send-btn').addEventListener('click', async () => {
         if ($('send-btn').disabled) return;
         const text = $('food-input').value.trim();
+        if (listening) return listening.stop();
+        if (SpeechRec && !text && !pickedImage) return startSpeech();
         if (!hasAi()) {
             if (text.length >= 2) searchOnline(text);
             return;
@@ -2604,6 +2725,7 @@
         el.closest('.chat-container').classList.toggle('typing', el.value.trim() !== '' && !hasPhoto);
         el.style.height = '';
         if (el.value) el.style.height = Math.min(el.scrollHeight + 2, 150) + 'px';
+        updateSendBtn();
     }
     $('food-input').addEventListener('input', fitFoodInput);
 
@@ -3524,6 +3646,7 @@
         userPrefs = prefs || {};
         kitchen = { ...KITCHEN_DEFAULTS, ...(userPrefs.kitchen || {}) };
         renderKitchen();
+        if (adaptState) renderAdaptive();
     }
 
     async function saveKitchenPrefs() {
@@ -4002,6 +4125,432 @@
         const name = $('meal-name').value.trim();
         hidePreview();
         openRecipeEditor(null, rows, name);
+    });
+
+    // ---------- Spracheingabe ----------
+    // Leeres Eingabefeld: Senden-Knopf wird zum Mikrofon (wie bei Messengern). Erkannt wird über den Browser (kostenlos),
+    // der Text landet im Feld und kann vor dem Senden korrigiert werden.
+
+    const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let listening = null;
+
+    function updateSendBtn() {
+        const btn = $('send-btn');
+        const empty = !$('food-input').value.trim() && !pickedImage;
+        const mic = !!SpeechRec && empty;
+        btn.classList.toggle('mic', !!listening || mic);
+        btn.classList.toggle('listening', !!listening);
+        btn.innerText = listening ? '■' : mic ? '🎤' : (hasAi() ? 'Senden' : 'Suchen');
+        btn.title = listening ? 'Aufnahme beenden' : mic ? 'Sprechen statt tippen' : '';
+        btn.setAttribute('aria-label', btn.title || btn.innerText);
+    }
+
+    function startSpeech() {
+        const rec = new SpeechRec();
+        rec.lang = 'de-DE';
+        rec.interimResults = true;
+        rec.continuous = false;
+        const before = $('food-input').value.trim();
+        rec.onresult = (event) => {
+            const said = [...event.results].map(r => r[0].transcript).join('');
+            $('food-input').value = (before ? before + ' ' : '') + said;
+            fitFoodInput();
+        };
+        rec.onerror = (event) => {
+            if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+                showToast('Mikrofon ist nicht erlaubt – in den Browser-Einstellungen für diese Seite freigeben.');
+            } else if (event.error === 'no-speech') {
+                showToast('Nichts gehört – tippe nochmal aufs Mikrofon.');
+            } else if (event.error !== 'aborted') {
+                showToast('Spracheingabe gerade nicht möglich (' + event.error + ').');
+            }
+        };
+        rec.onend = () => {
+            listening = null;
+            updateSendBtn();
+            // Vorschläge anzeigen (Suchmodus) bzw. Text zum Prüfen stehen lassen
+            $('food-input').dispatchEvent(new Event('input'));
+        };
+        listening = rec;
+        updateSendBtn();
+        try {
+            rec.start();
+        } catch (e) {
+            listening = null;
+            updateSendBtn();
+        }
+    }
+
+    // ---------- Was soll ich essen? / Speisekarte ----------
+
+    let ideasTraining = '';
+
+    function todayTotals() {
+        const list = currentDay === todayStr() ? localEntries : [];
+        const sum = f => list.reduce((s, e) => s + (Number(e[f]) || 0), 0);
+        return { kcal: sum('kcal'), protein_g: sum('protein_g'), carbs_g: sum('carbs_g'), fat_g: sum('fat_g') };
+    }
+
+    // Wie viele Mahlzeiten kommen heute noch? Aus den Erinnerungszeiten, sonst grob nach Uhrzeit
+    function mealsLeftToday() {
+        const now = new Date().getHours() * 60 + new Date().getMinutes();
+        const planned = (remindMeals || []).filter(m => m.on !== false);
+        if (planned.length) return Math.max(1, planned.filter(m => timeToMin(m.time) >= now - 45).length);
+        const h = new Date().getHours();
+        const n = h < 10 ? 4 : h < 14 ? 3 : h < 18 ? 2 : 1;
+        return profile?.goal === 'zunehmen' ? n + 1 : n;
+    }
+
+    function adviceContext() {
+        const t = todayTotals();
+        const goalLabel = { abnehmen: 'Abnehmen', halten: 'Gewicht halten', zunehmen: 'Muskelaufbau / Zunehmen' };
+        const top = [...historyMap.values()].sort((a, b) => b.count - a.count).slice(0, 12).map(h => h.last.name);
+        return {
+            uhrzeit: new Date().toTimeString().slice(0, 5),
+            mahlzeit: MEAL_LABEL[mealOfTime()],
+            ziel: goalLabel[profile?.goal] || 'Gewicht halten',
+            offen: {
+                kcal: Math.round((Number(profile?.kcal_goal) || 0) - t.kcal),
+                protein_g: Math.round((Number(profile?.protein_goal) || 0) - t.protein_g)
+            },
+            heute_gegessen: { kcal: Math.round(t.kcal), protein_g: Math.round(t.protein_g), carbs_g: Math.round(t.carbs_g), fat_g: Math.round(t.fat_g) },
+            mahlzeiten_uebrig: mealsLeftToday(),
+            training: { gleich: 'Training in 1–3 Stunden', vorhin: 'Training gerade beendet' }[ideasTraining] || 'nicht relevant',
+            reste: kitchen.on ? leftoversList.map(l => ({ name: l.name, portionen: Number(l.portions_left), kcal_pro_portion: Number(l.kcal), eiweiss_pro_portion: Number(l.protein_g) })) : [],
+            rezepte: kitchen.on ? recipesList.map(r => r.name) : [],
+            haeufig: top
+        };
+    }
+
+    function openIdeas() {
+        if (!hasAi()) return openAiCard();
+        const c = adviceContext();
+        $('ideas-context').innerText = c.offen.kcal > 0
+            ? `Heute noch offen: ${fmt(c.offen.kcal)} kcal · ${fmt(Math.max(0, c.offen.protein_g))} g Eiweiß · gerade: ${c.mahlzeit}`
+            : `Dein Kalorienziel für heute ist erreicht. Bei Hunger gibt's leichte, sättigende Ideen.`;
+        $('ideas-sheet').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeIdeas() {
+        $('ideas-sheet').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    function ideasLoading(text) {
+        $('ideas-results').innerHTML = `<div class="ideas-loading"><div class="spinner"></div><span>${esc(text)}</span></div>`;
+    }
+
+    function ideasError(err) {
+        $('ideas-results').innerHTML = `<p class="preview-note" style="color: var(--danger); margin-top: 12px;">${esc(err.message || String(err))}</p>`;
+    }
+
+    let ideasData = [];   // zuletzt angezeigte Vorschläge (für "Das esse ich")
+
+    function adviceItem(i, note) {
+        return {
+            name: i.name, amount: i.amount || (i.grams ? `${Math.round(i.grams)} g` : '1 Portion'),
+            grams: i.grams || null, kcal: i.kcal, protein_g: i.protein_g, carbs_g: i.carbs_g, fat_g: i.fat_g,
+            source: 'ki', note
+        };
+    }
+
+    async function getSuggestions() {
+        const btn = $('ideas-go-btn');
+        btn.disabled = true;
+        ideasLoading('Überlege, was gerade passt …');
+        try {
+            const data = await invokeWithRetry({ suggest: { context: adviceContext() } }, () => ideasLoading('KI ausgelastet – neuer Versuch …'));
+            ideasData = (data.suggestions || []).map(s => ({ ...s, items: s.items.map(i => adviceItem(i, 'Vorschlag – Menge bei Bedarf anpassen')) }));
+            if (!ideasData.length) throw new Error('Keine Vorschläge bekommen. Bitte nochmal versuchen.');
+            $('ideas-results').innerHTML = ideasData.map((s, i) => {
+                const sum = f => s.items.reduce((a, it) => a + (Number(it[f]) || 0), 0);
+                return `
+                    <div class="idea">
+                        <div class="idea-head"><span class="idea-title">${esc(s.title)}</span><span class="sub-text">${fmt(sum('kcal'))} kcal · ${fmt(sum('protein_g'))} g Eiweiß</span></div>
+                        <div class="idea-why">${esc(s.why)}</div>
+                        <div class="idea-items">${s.items.map(it => esc(`${it.amount} ${it.name}`)).join(' · ')}</div>
+                        <button type="button" class="btn btn-small" data-idea="${i}">Das esse ich</button>
+                    </div>`;
+            }).join('');
+        } catch (err) {
+            ideasError(err);
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function checkMenu(file) {
+        openIdeas();
+        $('attach-menu').classList.add('hidden');
+        ideasLoading('Lese die Speisekarte …');
+        try {
+            const small = await shrinkImage(file, 1600, 0.85).catch(() => null);
+            const base64 = small || await toBase64(file);
+            const image = { mime: small ? 'image/jpeg' : (file.type || 'image/jpeg'), data: base64.split(',')[1] };
+            const data = await invokeWithRetry({ menu: { context: adviceContext(), image } }, () => ideasLoading('KI ausgelastet – neuer Versuch …'));
+            if (!data.picks?.length) throw new Error(data.note || 'Auf dem Foto war keine Speisekarte zu erkennen.');
+            ideasData = data.picks.map(p => ({ title: p.name, why: p.why, tip: p.tip, items: [adviceItem(p, 'Speisekarte · Restaurantportion geschätzt')] }));
+            $('ideas-results').innerHTML = `<p class="preview-note" style="margin: 12px 0 0;">Passt am besten zu deinem Tag:</p>` +
+                ideasData.map((s, i) => `
+                    <div class="idea">
+                        <div class="idea-head"><span class="idea-title">${esc(s.title)}</span><span class="sub-text">≈ ${fmt(s.items[0].kcal)} kcal · ${fmt(s.items[0].protein_g)} g Eiweiß</span></div>
+                        <div class="idea-why">${esc(s.why)}</div>
+                        ${s.tip ? `<div class="idea-tip">💡 ${esc(s.tip)}</div>` : ''}
+                        <button type="button" class="btn btn-small" data-idea="${i}">Das nehme ich</button>
+                    </div>`).join('') +
+                (data.note ? `<p class="preview-note" style="margin-top: 10px;">${esc(data.note)}</p>` : '');
+        } catch (err) {
+            ideasError(err);
+        }
+    }
+
+    $('ideas-btn').addEventListener('click', openIdeas);
+    $('ideas-close-btn').addEventListener('click', closeIdeas);
+    $('ideas-sheet').addEventListener('click', (event) => {
+        if (event.target === $('ideas-sheet')) return closeIdeas();
+        const pick = event.target.closest('[data-idea]');
+        if (pick) {
+            const s = ideasData[Number(pick.dataset.idea)];
+            if (!s) return;
+            closeIdeas();
+            showPreview(s.items, [], { allowMeal: s.items.length > 1, text: s.title });
+        }
+        const chip = event.target.closest('[data-training]');
+        if (chip) {
+            ideasTraining = chip.dataset.training;
+            $('ideas-training').querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+        }
+    });
+    $('ideas-go-btn').addEventListener('click', getSuggestions);
+    $('menu-input').addEventListener('change', () => {
+        const file = $('menu-input').files[0];
+        $('menu-input').value = '';
+        if (file) checkMenu(file);
+    });
+
+    // Tipp auf eine Essens-Erinnerung öffnet die Ideen (?ideen=1 bzw. Nachricht vom Service Worker)
+    function openIdeasFromNotification() {
+        if (hasAi() && !$('app').classList.contains('hidden')) openIdeas();
+    }
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.addEventListener('message', (event) => {
+            if (event.data?.open === 'ideas') openIdeasFromNotification();
+        });
+    }
+
+    // ---------- Ziel, das mitlernt ----------
+    // Echter Verbrauch = Durchschnitt gegessen − Gewichtstrend × 7700 kcal/kg. Vorschläge nur nach genug Daten,
+    // in Schritten von höchstens 300 kcal, nie unter dem Grundumsatz, und nur nach Bestätigung.
+
+    const ADAPT_DAYS = 28, ADAPT_MIN_LOGGED = 14, ADAPT_MIN_WEIGHTS = 3, ADAPT_QUIET_DAYS = 14;
+    let adaptState = null;
+
+    const adaptPrefs = () => ({ on: true, offset: 0, ...(userPrefs.adaptive || {}) });
+
+    async function savePrefs() {
+        writeStore(userKey('prefs'), userPrefs);
+        const { error } = await supabase.from('user_prefs').upsert({
+            user_id: currentSession.user.id, prefs: userPrefs, updated_at: new Date().toISOString()
+        });
+        if (error && !isNetworkError(error)) console.warn('Einstellungen:', error.message);
+    }
+
+    // Kalorienziel aus der Formel, wie beim Einrichten (ohne Anpassung)
+    function formulaTargets(p = profile, kg = Number(profile?.weight_kg)) {
+        if (!p || !p.height_cm || !p.age || !ACTIVITY[p.activity] || !GOALS[p.goal] || !kg) return null;
+        const perKg = p.weight_kg && p.protein_goal ? p.protein_goal / p.weight_kg : GOALS[p.goal].protein;
+        return calcTargets({ kg, cm: Number(p.height_cm), age: Number(p.age), sex: p.sex, activity: p.activity, goal: p.goal, proteinPerKg: perKg });
+    }
+
+    // Formelziel + bestätigte Anpassung (nie unter dem Grundumsatz)
+    function withAdaptOffset(t) {
+        const off = Number(adaptPrefs().offset) || 0;
+        return Math.max(t.bmr, Math.round(t.kcal + off));
+    }
+
+    async function computeAdaptive() {
+        const base = formulaTargets();
+        if (!profile?.kcal_goal || !base) return null;
+        const today = todayStr();
+        const { data, error } = await supabase.from('entries').select('day, kcal')
+            .eq('user_id', currentSession.user.id).gte('day', addDays(today, -ADAPT_DAYS)).lt('day', today);
+        if (error) return adaptState;
+
+        // Tage mit sehr wenig Einträgen gelten als unvollständig (sonst sähe der Verbrauch zu niedrig aus)
+        const perDay = new Map();
+        data.forEach(e => perDay.set(e.day, (perDay.get(e.day) || 0) + (Number(e.kcal) || 0)));
+        const minDay = Math.max(600, Number(profile.kcal_goal) * 0.35);
+        const logged = [...perDay.values()].filter(k => k >= minDay);
+
+        const weights = weightsList.filter(w => w.day >= addDays(today, -ADAPT_DAYS - 7)).sort((a, b) => a.day.localeCompare(b.day));
+        const t = d => parseDay(d).getTime() / 86400000;
+        const span = weights.length ? t(weights.at(-1).day) - t(weights[0].day) : 0;
+        const st = { loggedDays: logged.length, weighIns: weights.length, span, goal: Number(profile.kcal_goal) };
+        if (logged.length < ADAPT_MIN_LOGGED || weights.length < ADAPT_MIN_WEIGHTS || span < 14) return (adaptState = { ...st, ready: false });
+
+        // Gewichtstrend per linearer Regression (glättet Wasserschwankungen)
+        const xs = weights.map(w => t(w.day)), ys = weights.map(w => Number(w.kg));
+        const mx = xs.reduce((a, b) => a + b, 0) / xs.length, my = ys.reduce((a, b) => a + b, 0) / ys.length;
+        const slope = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0); // kg pro Tag
+        const avgIntake = logged.reduce((a, b) => a + b, 0) / logged.length;
+        const tdee = avgIntake - slope * 7700;
+        const kg = ys.at(-1);
+        const weeklyPct = slope * 7 / kg * 100;
+
+        if (tdee < base.bmr * 1.05 || tdee > base.bmr * 2.6) return (adaptState = { ...st, ready: true, implausible: true, avgIntake, slope });
+
+        let rec = tdee + GOALS[profile.goal].delta;
+        let warn = '';
+        if (profile.goal === 'abnehmen' && weeklyPct < -1) {
+            warn = 'fast-loss';
+            rec = Math.max(rec, st.goal + 150);
+        } else if (profile.goal === 'zunehmen' && weeklyPct > 0.5) {
+            warn = 'fast-gain';
+        }
+        rec = Math.max(base.bmr, rec);
+        rec = Math.min(st.goal + 300, Math.max(st.goal - 300, rec));
+        rec = Math.round(rec / 50) * 50;
+        const needs = Math.abs(rec - st.goal) >= 100 || (warn && rec !== st.goal);
+        return (adaptState = { ...st, ready: true, tdee, slope, weeklyPct, avgIntake, rec, warn, needs, bmr: base.bmr });
+    }
+
+    function daysSince(day) {
+        return day ? Math.round((parseDay(todayStr()) - parseDay(day)) / 86400000) : Infinity;
+    }
+
+    const GOAL_AIM = {
+        zunehmen: 'Damit du weiter langsam zunimmst (etwa 0,25 kg pro Woche – gut für Muskelaufbau)',
+        abnehmen: 'Damit du gesund abnimmst (etwa 0,3–0,5 kg pro Woche)',
+        halten: 'Damit dein Gewicht stabil bleibt'
+    };
+    const WARN_TEXT = {
+        'fast-loss': 'Du nimmst gerade mehr als 1 % deines Gewichts pro Woche ab. Das ist schneller als empfohlen und kann Muskeln und Energie kosten – darum der Vorschlag, etwas mehr zu essen.',
+        'fast-gain': 'Du nimmst schneller zu als für Muskelaufbau nötig (über 0,5 % pro Woche). Etwas weniger reicht und hält den Fettanteil im Rahmen.'
+    };
+
+    function renderAdaptive() {
+        const a = adaptPrefs();
+        const s = adaptState;
+        $('adapt-on').checked = a.on;
+        let html;
+        if (!a.on) {
+            html = `<p class="preview-note" style="margin: 0;">Ausgeschaltet – dein Ziel bleibt fest bei ${fmt(profile?.kcal_goal)} kcal.</p>`;
+        } else if (!s) {
+            html = `<p class="preview-note" style="margin: 0;">Wird berechnet …</p>`;
+        } else if (!s.ready) {
+            const pct = Math.min(100, Math.round((Math.min(1, s.loggedDays / ADAPT_MIN_LOGGED) * 0.6 + Math.min(1, s.weighIns / ADAPT_MIN_WEIGHTS) * 0.2 + Math.min(1, s.span / 14) * 0.2) * 100));
+            html = `<b>Lernt noch …</b>
+                <div class="adapt-progress"><span style="width: ${pct}%"></span></div>
+                <p class="preview-note" style="margin: 0;">${s.loggedDays} von ${ADAPT_MIN_LOGGED} Tagen mit Einträgen · ${s.weighIns} Wiegungen (mind. ${ADAPT_MIN_WEIGHTS}, über 2 Wochen verteilt). Danach rechnet die App aus, was dein Körper wirklich verbraucht.</p>`;
+        } else if (s.implausible) {
+            html = `<p class="preview-note" style="margin: 0;">Essen und Gewichtsverlauf passen noch nicht zusammen – vermutlich fehlen an manchen Tagen Einträge. Je vollständiger du einträgst, desto besser klappt die Rechnung.</p>`;
+        } else {
+            const trend = (s.slope * 7 >= 0 ? '+' : '−') + fmtNum(Math.abs(s.slope * 7)).replace('.', ',') + ' kg pro Woche';
+            const quiet = daysSince(a.appliedOn) < ADAPT_QUIET_DAYS;
+            html = `<div class="adapt-big">≈ ${fmt(s.tdee)} kcal pro Tag</div>
+                <p class="preview-note" style="margin: 2px 0 0;">Dein geschätzter Verbrauch · aus ${s.loggedDays} Tagen · Gewichtstrend ${trend}</p>`;
+            if (s.needs && !quiet) {
+                html += `<div class="adapt-rec${s.warn ? ' warn' : ''}">
+                    ${s.warn ? `<p style="margin: 0 0 6px;">${WARN_TEXT[s.warn]}</p>` : ''}
+                    <p style="margin: 0;">${GOAL_AIM[profile.goal] || ''}: <b>${fmt(s.rec)} kcal</b> statt ${fmt(s.goal)} kcal.</p>
+                    ${Math.abs(s.rec - s.goal) >= 300 ? '<p class="preview-note" style="margin: 4px 0 0;">Bewusst in kleinen Schritten – nach 2 Wochen schaut die App wieder drauf.</p>' : ''}
+                    <div class="row" style="margin-top: 10px;">
+                        <button type="button" class="btn btn-small" id="adapt-apply-btn">Ziel auf ${fmt(s.rec)} setzen</button>
+                        <button type="button" class="btn btn-small btn-sec" id="adapt-later-btn">Nicht jetzt</button>
+                    </div></div>`;
+            } else if (quiet) {
+                html += `<p class="preview-note" style="margin: 8px 0 0;">✓ Ziel vor ${daysSince(a.appliedOn)} Tagen angepasst. Die App wartet jetzt 2 Wochen, wie dein Körper darauf reagiert.</p>`;
+            } else {
+                html += `<p class="preview-note" style="margin: 8px 0 0;">✓ Dein Ziel von ${fmt(s.goal)} kcal passt dazu.</p>`;
+            }
+        }
+        $('adapt-body').innerHTML = html;
+        updateAdaptTip();
+    }
+
+    function updateAdaptTip() {
+        const a = adaptPrefs(), s = adaptState;
+        const show = a.on && s?.ready && s.needs && !s.implausible &&
+            daysSince(a.appliedOn) >= ADAPT_QUIET_DAYS && daysSince(a.dismissedOn) >= ADAPT_QUIET_DAYS;
+        $('adapt-tip-card').classList.toggle('hidden', !show);
+        if (show) {
+            $('adapt-tip-text').innerText = s.warn
+                ? WARN_TEXT[s.warn]
+                : `Nach ${s.loggedDays} Tagen weiß die App mehr: Du verbrauchst etwa ${fmt(s.tdee)} kcal am Tag. Für dein Ziel passen eher ${fmt(s.rec)} statt ${fmt(s.goal)} kcal.`;
+        }
+    }
+
+    async function refreshAdaptive() {
+        if (!adaptPrefs().on) return renderAdaptive();
+        await computeAdaptive();
+        renderAdaptive();
+    }
+
+    async function applyAdaptive() {
+        const s = adaptState;
+        const base = formulaTargets();
+        if (!s?.rec || !base) return;
+        const { data, error } = await supabase.from('profiles').update({ kcal_goal: s.rec }).eq('user_id', currentSession.user.id).select().single();
+        if (error) {
+            alert('Ziel konnte nicht gespeichert werden: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+            return;
+        }
+        profile = data;
+        writeStore(userKey('profile'), profile);
+        // Abstand zur Formel merken: gilt auch, wenn sich später das Gewicht ändert
+        userPrefs.adaptive = { ...adaptPrefs(), offset: s.rec - base.kcal, appliedOn: todayStr() };
+        await savePrefs();
+        adaptState = { ...s, goal: s.rec, needs: false };
+        renderSummary();
+        renderAdaptive();
+        showToast(`Neues Ziel: ${fmt(s.rec)} kcal pro Tag`);
+    }
+
+    $('adapt-body').addEventListener('click', (event) => {
+        if (event.target.id === 'adapt-apply-btn') applyAdaptive();
+        if (event.target.id === 'adapt-later-btn') {
+            userPrefs.adaptive = { ...adaptPrefs(), dismissedOn: todayStr() };
+            savePrefs();
+            renderAdaptive();
+            showToast('Okay – die App fragt in 2 Wochen wieder.');
+        }
+    });
+    $('adapt-on').addEventListener('change', () => {
+        userPrefs.adaptive = { ...adaptPrefs(), on: $('adapt-on').checked };
+        savePrefs();
+        refreshAdaptive();
+    });
+    $('adapt-tip-open').addEventListener('click', () => {
+        showView('progress');
+        $('adapt-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    $('adapt-tip-later').addEventListener('click', () => {
+        userPrefs.adaptive = { ...adaptPrefs(), dismissedOn: todayStr() };
+        savePrefs();
+        updateAdaptTip();
+    });
+
+    // ---------- Willkommen (nur beim ersten Einrichten) ----------
+
+    function openWelcome() {
+        const ai = hasAi();
+        $('welcome-unlock').classList.toggle('hidden', ai);
+        $('welcome-unlock-btn').classList.toggle('hidden', ai);
+        $('welcome-later-btn').innerText = ai ? "Los geht's" : 'Erstmal so starten';
+        $('welcome-sheet').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeWelcome() {
+        $('welcome-sheet').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    $('welcome-later-btn').addEventListener('click', closeWelcome);
+    $('welcome-unlock-btn').addEventListener('click', () => {
+        closeWelcome();
+        openAiCard();
     });
 
     // ---------- Erinnerungen (Push) ----------
