@@ -3092,7 +3092,11 @@
         try {
             const sup = pushSupport();
             if (!currentSession || !sup.ok || (!sup.granted && !create)) return false;
-            const reg = await navigator.serviceWorker.ready;
+            const reg = await Promise.race([
+                navigator.serviceWorker.ready,
+                new Promise((_, reject) => setTimeout(() => reject(new Error(
+                    'Hintergrunddienst der App nicht aktiv. App komplett schließen (wegwischen) und über das Symbol neu öffnen.')), 8000))
+            ]);
             let sub = await reg.pushManager.getSubscription();
             if (!sub && !create) return false;
             if (!sub) {
@@ -3121,9 +3125,18 @@
     }
 
     async function enablePush() {
+        const sup = pushSupport();
+        if (!sup.ok) {
+            updatePushHint();
+            alert(sup.text);
+            return false;
+        }
         const perm = await Notification.requestPermission();
         if (perm !== 'granted') {
             updatePushHint();
+            alert(perm === 'denied'
+                ? 'Mitteilungen wurden abgelehnt. Erlauben in den Handy-Einstellungen → Mitteilungen → Kcal.'
+                : 'Ohne deine Erlaubnis kann die App keine Mitteilungen schicken.');
             return false;
         }
         try {
@@ -3146,7 +3159,7 @@
             $('remind-push-hint').innerText = 'Einstellungen konnten nicht geladen werden: ' + error.message;
             return;
         }
-        remindLoaded = true;
+        remindLoaded = !!data; // noch nie gespeichert -> beim nächsten Öffnen neu nach aktuellem Ziel berechnen
         const s = data?.settings || {};
         $('remind-on').checked = !!data?.enabled;
         $('remind-wake').value = s.wake || '07:00';
@@ -3168,12 +3181,7 @@
     $('remind-save-btn').addEventListener('click', async () => {
         const btn = $('remind-save-btn');
         const enabled = $('remind-on').checked;
-        if (enabled && !pushSupport().granted) {
-            if (!pushSupport().ok || !(await enablePush())) {
-                alert('Ohne Erlaubnis für Push-Nachrichten können keine Erinnerungen kommen.');
-                return;
-            }
-        }
+        if (enabled && !pushSupport().granted && !(await enablePush())) return;
         btn.disabled = true;
         const { error } = await supabase.from('reminder_settings').upsert({
             user_id: currentSession.user.id,
@@ -3200,13 +3208,11 @@
 
     $('remind-test-btn').addEventListener('click', async () => {
         const btn = $('remind-test-btn');
-        if (!pushSupport().granted && !(pushSupport().ok && await enablePush())) {
-            updatePushHint();
-            return;
-        }
+        if (!pushSupport().granted && !(await enablePush())) return;
         btn.disabled = true;
         try {
             await syncPush(true);
+            updatePushHint();
             const { data, error } = await supabase.functions.invoke('remind', { body: { test: true } });
             if (error) throw new Error(error.message);
             if (data.error) throw new Error(data.error);
