@@ -1843,13 +1843,29 @@
         showStatus(`Suche Produkt ${code} …`, false);
         $('status-retry-btn').classList.add('hidden');
         let product = null;
-        try {
-            const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json` +
-                '?fields=product_name,product_name_de,brands,nutriments,serving_quantity,product_quantity', { signal: AbortSignal.timeout(10000) });
-            const d = await r.json();
-            if (d.status === 1) product = d.product;
-        } catch (err) {
-            showStatus('Open Food Facts ist gerade nicht erreichbar. Beschreib das Produkt stattdessen im Textfeld.', true, false);
+        const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json` +
+            '?fields=product_name,product_name_de,brands,nutriments,serving_quantity,product_quantity';
+        let lastErr = null;
+        // Zwei Versuche; Zeitlimit per AbortController (AbortSignal.timeout fehlt auf älteren Handys)
+        for (let attempt = 0; attempt < 2 && !product; attempt++) {
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 12000);
+            try {
+                const r = await fetch(url, { signal: ctrl.signal });
+                if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
+                const d = await r.json();
+                lastErr = null;
+                if (d.status === 1) product = d.product;
+                break; // Antwort erhalten (gefunden oder nicht) -> kein zweiter Versuch
+            } catch (err) {
+                lastErr = err;
+            } finally {
+                clearTimeout(timer);
+            }
+        }
+        if (lastErr) {
+            const why = lastErr.name === 'AbortError' ? 'Zeitüberschreitung' : (lastErr.message || String(lastErr));
+            showStatus(`Open Food Facts ist gerade nicht erreichbar (${why}). Beschreib das Produkt stattdessen im Textfeld.`, true, false);
             return;
         }
 
