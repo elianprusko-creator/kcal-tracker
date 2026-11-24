@@ -302,6 +302,11 @@
         .chat-inner { width: 100%; max-width: 480px; }
         .photo-btn { width: auto; padding: 10px 12px; flex-shrink: 0; display: flex; align-items: center; }
         .photo-btn.has-file { background: var(--warn); }
+        .remind-row { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 6px 0; cursor: pointer; }
+        .remind-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; }
+        .remind-row input[type="time"] { width: auto; margin: 0 0 0 auto; padding: 6px; }
+        .remind-sub { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 4px; }
+        .remind-sub .btn { width: auto; }
         .attach-menu { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
             margin-bottom: 8px; background: var(--card); max-width: 260px; }
         .attach-menu.hidden { display: none; }
@@ -554,6 +559,44 @@
         <details class="card" id="meals-card">
             <summary><h3>Meine Gerichte <span class="sub-text" id="meals-count"></span></h3></summary>
             <div id="meals-list" style="margin-top: 8px;"></div>
+        </details>
+
+        <!-- Erinnerungen (Push) -->
+        <details class="card" id="remind-card">
+            <summary><h3>Erinnerungen <span class="sub-text" id="remind-state"></span></h3></summary>
+            <div style="margin-top: 10px;">
+                <p class="preview-note" id="remind-push-hint" style="margin: 0 0 10px;"></p>
+                <button type="button" class="btn btn-sec hidden" id="remind-enable-btn" style="margin-bottom: 12px;">🔔 Push-Nachrichten auf diesem Handy erlauben</button>
+
+                <label class="remind-row"><input type="checkbox" id="remind-on"> <b>Erinnerungen einschalten</b></label>
+
+                <div class="row" style="margin-top: 10px;">
+                    <div><label>Aufstehen</label><input type="time" id="remind-wake" value="07:00" style="margin: 0;"></div>
+                    <div><label>Schlafen</label><input type="time" id="remind-sleep" value="23:00" style="margin: 0;"></div>
+                </div>
+
+                <div class="remind-sub">
+                    <b>Essen</b>
+                    <button type="button" class="btn btn-small btn-sec" id="remind-recalc-btn">Zeiten neu berechnen</button>
+                </div>
+                <p class="preview-note" id="remind-plan-note" style="margin: 0 0 6px;"></p>
+                <div id="remind-meals"></div>
+
+                <div class="remind-sub"><b>Wasser</b></div>
+                <label class="remind-row">
+                    <input type="checkbox" id="remind-water-on"> Erinnern alle
+                    <select id="remind-water-every" style="width: auto; margin: 0; padding: 6px;">
+                        <option value="60">1 h</option><option value="90">1,5 h</option>
+                        <option value="120" selected>2 h</option><option value="180">3 h</option>
+                    </select>
+                </label>
+                <p class="preview-note" style="margin: 4px 0 0;">Nur wenn du hinter deinem Wasserziel liegst. Essens-Erinnerungen fallen weg, wenn du die Mahlzeit schon eingetragen hast.</p>
+
+                <div class="row" style="margin-top: 14px;">
+                    <button type="button" class="btn" id="remind-save-btn">Speichern</button>
+                    <button type="button" class="btn btn-sec" id="remind-test-btn">Test senden</button>
+                </div>
+            </div>
         </details>
 
         <!-- Export -->
@@ -1013,6 +1056,7 @@
         updateOfflineBadge();
         flushPending();
         flushWater();
+        syncPush();
         if (!profile || !profile.kcal_goal) {
             showOnboarding();
         } else {
@@ -2953,6 +2997,227 @@
             writeStore(productKey(code), p);
         });
     }
+
+    // ---------- Erinnerungen (Push) ----------
+    // Die Zeiten liegen in Supabase (reminder_settings); die Edge Function "remind" prüft alle 5 Minuten,
+    // ob etwas fällig ist, und schickt die Nachricht – auch wenn die App geschlossen ist.
+
+    const VAPID_PUBLIC_KEY = 'BK_nDOuKR1qLEX81qihhwTjlABW4dzvCFdL6gyuGpdsGQNc1xx7F400agnuaVHaRcaAif00gYyP4Z-L57Odri5s';
+
+    // Mahlzeiten je Ziel: Minuten nach dem Aufstehen
+    const MEAL_PLANS = {
+        abnehmen: {
+            note: '3 Mahlzeiten mit ca. 4–5 h Abstand, keine Snacks dazwischen – das hält den Blutzucker ruhig und macht satt. Letzte Mahlzeit ca. 3 h vor dem Schlafen.',
+            slots: [['fruehstueck', 'Frühstück', 60], ['mittag', 'Mittagessen', 330], ['abend', 'Abendessen', 690]]
+        },
+        halten: {
+            note: '3 Mahlzeiten und ein Snack am Nachmittag, gleichmäßig über den Tag verteilt.',
+            slots: [['fruehstueck', 'Frühstück', 60], ['mittag', 'Mittagessen', 300], ['snack', 'Snack', 480], ['abend', 'Abendessen', 690]]
+        },
+        zunehmen: {
+            note: 'Aufbau: 5–6 Mahlzeiten etwa alle 3 h, damit du genug Kalorien schaffst und Eiweiß gleichmäßig verteilt ist (ca. 30–40 g pro Mahlzeit).',
+            slots: [['fruehstueck', 'Frühstück', 45], ['snack', 'Snack', 210], ['mittag', 'Mittagessen', 360],
+                ['snack', 'Snack', 540], ['abend', 'Abendessen', 720], ['snack', 'Snack vor dem Schlafen', 9999]]
+        }
+    };
+
+    const timeToMin = t => { const [h, m] = String(t || '').split(':').map(Number); return h * 60 + (m || 0); };
+    const minToTime = m => `${String(Math.floor(m / 60) % 24).padStart(2, '0')}:${String(Math.round(m % 60)).padStart(2, '0')}`;
+
+    function planMeals(wake, sleep, goal) {
+        const plan = MEAL_PLANS[goal] || MEAL_PLANS.halten;
+        const w = timeToMin(wake);
+        let s = timeToMin(sleep);
+        if (s <= w) s += 24 * 60;
+        // Abnehmen: Abendessen spätestens 3 h vor dem Schlafen, sonst 1,5 h; nie nach Mitternacht
+        const latest = Math.min(s - (goal === 'abnehmen' ? 180 : 90), 24 * 60 - 5);
+        let prev = -Infinity;
+        return plan.slots.map(([meal, label, offset]) => {
+            let t = offset === 9999 ? s - 60 : Math.min(w + offset, latest);
+            t = Math.min(Math.max(t, prev + 60), 24 * 60 - 5);
+            prev = t;
+            return { meal, label, time: minToTime(t), on: true };
+        }).filter((m, i, list) => list.findIndex(o => o.time === m.time) === i);
+    }
+
+    let remindMeals = [];
+    let remindLoaded = false;
+
+    function renderRemindMeals() {
+        $('remind-meals').innerHTML = remindMeals.map((m, i) => `
+            <label class="remind-row">
+                <input type="checkbox" data-i="${i}" data-k="on" ${m.on !== false ? 'checked' : ''}>
+                ${esc(m.label)}
+                <input type="time" data-i="${i}" data-k="time" value="${esc(m.time)}">
+            </label>`).join('');
+        const goal = profile?.goal || 'halten';
+        $('remind-plan-note').innerText = `Passend zu deinem Ziel (${{ abnehmen: 'Abnehmen', halten: 'Gewicht halten', zunehmen: 'Aufbau' }[goal] || goal}): ${(MEAL_PLANS[goal] || MEAL_PLANS.halten).note}`;
+    }
+
+    $('remind-meals').addEventListener('change', (event) => {
+        const el = event.target;
+        const m = remindMeals[Number(el.dataset.i)];
+        if (!m) return;
+        if (el.dataset.k === 'on') m.on = el.checked;
+        if (el.dataset.k === 'time' && el.value) m.time = el.value;
+    });
+
+    $('remind-recalc-btn').addEventListener('click', () => {
+        remindMeals = planMeals($('remind-wake').value || '07:00', $('remind-sleep').value || '23:00', profile?.goal);
+        renderRemindMeals();
+    });
+
+    function pushSupport() {
+        const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+        const isIos = /iPhone|iPad|iPod/.test(navigator.userAgent);
+        if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+            return { ok: false, text: isIos && !standalone
+                ? 'Auf dem iPhone gehen Push-Nachrichten nur, wenn du die App über das Symbol auf dem Home-Bildschirm öffnest (iOS 16.4 oder neuer).'
+                : 'Dieser Browser unterstützt keine Push-Nachrichten.' };
+        }
+        if (Notification.permission === 'denied') {
+            return { ok: false, text: 'Mitteilungen sind für diese App blockiert. Erlauben in den Handy-Einstellungen → Mitteilungen → Kcal Tracker (bzw. Browser-Einstellungen).' };
+        }
+        return { ok: true, granted: Notification.permission === 'granted' };
+    }
+
+    function urlB64ToUint8Array(b64) {
+        const pad = '='.repeat((4 - b64.length % 4) % 4);
+        const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+        return Uint8Array.from(raw, c => c.charCodeAt(0));
+    }
+
+    // Abo dieses Geräts in Supabase speichern (Endpunkt kann sich ändern -> bei jedem Start abgleichen)
+    async function syncPush(create = false) {
+        try {
+            const sup = pushSupport();
+            if (!currentSession || !sup.ok || (!sup.granted && !create)) return false;
+            const reg = await navigator.serviceWorker.ready;
+            let sub = await reg.pushManager.getSubscription();
+            if (!sub && !create) return false;
+            if (!sub) {
+                sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlB64ToUint8Array(VAPID_PUBLIC_KEY) });
+            }
+            const j = sub.toJSON();
+            const { error } = await supabase.from('push_subscriptions').upsert({
+                endpoint: j.endpoint, user_id: currentSession.user.id, p256dh: j.keys.p256dh, auth: j.keys.auth
+            });
+            if (error) throw new Error(error.message);
+            return true;
+        } catch (err) {
+            if (create) throw err;
+            console.warn('Push:', err.message || err);
+            return false;
+        }
+    }
+
+    function updatePushHint() {
+        const sup = pushSupport();
+        $('remind-push-hint').innerText = !sup.ok ? sup.text
+            : sup.granted ? '✓ Push-Nachrichten sind auf diesem Handy erlaubt.'
+            : 'Damit Erinnerungen ankommen, musst du Push-Nachrichten einmal erlauben.';
+        $('remind-push-hint').style.color = sup.ok ? '' : 'var(--danger)';
+        $('remind-enable-btn').classList.toggle('hidden', !sup.ok || sup.granted);
+    }
+
+    async function enablePush() {
+        const perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
+            updatePushHint();
+            return false;
+        }
+        try {
+            await syncPush(true);
+        } catch (err) {
+            alert('Push konnte nicht eingerichtet werden: ' + (err.message || err));
+            return false;
+        }
+        updatePushHint();
+        return true;
+    }
+
+    $('remind-enable-btn').addEventListener('click', enablePush);
+
+    async function loadReminders() {
+        updatePushHint();
+        if (remindLoaded) return;
+        const { data, error } = await supabase.from('reminder_settings').select('*').eq('user_id', currentSession.user.id).maybeSingle();
+        if (error) {
+            $('remind-push-hint').innerText = 'Einstellungen konnten nicht geladen werden: ' + error.message;
+            return;
+        }
+        remindLoaded = true;
+        const s = data?.settings || {};
+        $('remind-on').checked = !!data?.enabled;
+        $('remind-wake').value = s.wake || '07:00';
+        $('remind-sleep').value = s.sleep || '23:00';
+        $('remind-water-on').checked = s.water ? s.water.on !== false : true;
+        $('remind-water-every').value = String(s.water?.every || 120);
+        remindMeals = s.meals?.length ? s.meals : planMeals($('remind-wake').value, $('remind-sleep').value, profile?.goal);
+        renderRemindMeals();
+        $('remind-state').innerText = data?.enabled ? '· an' : '';
+    }
+
+    $('remind-card').addEventListener('toggle', () => {
+        if ($('remind-card').open) loadReminders();
+    });
+
+    // Aufstehzeit geändert -> Essenszeiten gleich mitverschieben
+    ['remind-wake', 'remind-sleep'].forEach(id => $(id).addEventListener('change', () => $('remind-recalc-btn').click()));
+
+    $('remind-save-btn').addEventListener('click', async () => {
+        const btn = $('remind-save-btn');
+        const enabled = $('remind-on').checked;
+        if (enabled && !pushSupport().granted) {
+            if (!pushSupport().ok || !(await enablePush())) {
+                alert('Ohne Erlaubnis für Push-Nachrichten können keine Erinnerungen kommen.');
+                return;
+            }
+        }
+        btn.disabled = true;
+        const { error } = await supabase.from('reminder_settings').upsert({
+            user_id: currentSession.user.id,
+            enabled,
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Berlin',
+            settings: {
+                wake: $('remind-wake').value || '07:00',
+                sleep: $('remind-sleep').value || '23:00',
+                meals: [...remindMeals].sort((a, b) => a.time.localeCompare(b.time)),
+                water: { on: $('remind-water-on').checked, every: Number($('remind-water-every').value) }
+            },
+            updated_at: new Date().toISOString()
+        });
+        btn.disabled = false;
+        if (error) {
+            alert('Speichern fehlgeschlagen: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+            return;
+        }
+        remindMeals.sort((a, b) => a.time.localeCompare(b.time));
+        renderRemindMeals();
+        $('remind-state').innerText = enabled ? '· an' : '';
+        showToast(enabled ? 'Erinnerungen gespeichert' : 'Erinnerungen ausgeschaltet');
+    });
+
+    $('remind-test-btn').addEventListener('click', async () => {
+        const btn = $('remind-test-btn');
+        if (!pushSupport().granted && !(pushSupport().ok && await enablePush())) {
+            updatePushHint();
+            return;
+        }
+        btn.disabled = true;
+        try {
+            await syncPush(true);
+            const { data, error } = await supabase.functions.invoke('remind', { body: { test: true } });
+            if (error) throw new Error(error.message);
+            if (data.error) throw new Error(data.error);
+            if (!data.sent) throw new Error((data.errors || []).join(', ') || 'nicht zugestellt');
+            showToast('Test gesendet – kommt in ein paar Sekunden');
+        } catch (err) {
+            alert('Test fehlgeschlagen: ' + err.message);
+        } finally {
+            btn.disabled = false;
+        }
+    });
 
     // ---------- Offline-Modus ----------
     // Nur über https (GitHub Pages) bzw. localhost; per Doppelklick geöffnet (file://) gibt es keinen Service Worker

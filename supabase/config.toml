@@ -417,3 +417,7 @@ enabled = true
 [functions.estimate]
 # Nur eingeloggte Nutzer dürfen die KI aufrufen
 verify_jwt = true
+
+[functions.remind]
+# Wird von pg_cron ohne Login aufgerufen (sendet nur, was ohnehin fällig ist); Test-Modus prüft das Login selbst
+verify_jwt = false

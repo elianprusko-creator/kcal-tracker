@@ -1,7 +1,7 @@
 // Offline-Modus: App-Dateien zwischenspeichern, damit die App auch ohne Netz startet.
 // Daten (Supabase, Open Food Facts, KI) laufen NICHT über diesen Cache.
 // Nach Änderungen an dieser Datei die Versionsnummer erhöhen.
-const CACHE = 'kcal-v1';
+const CACHE = 'kcal-v2';
 const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 const CDN = [
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
@@ -63,5 +63,30 @@ self.addEventListener('fetch', (event) => {
             return cached;
         }
         return (await network) || Response.error();
+    })());
+});
+
+// Push-Erinnerungen (von der Edge Function "remind")
+self.addEventListener('push', (event) => {
+    let msg = {};
+    try { msg = event.data ? event.data.json() : {}; } catch (e) { msg = { body: event.data && event.data.text() }; }
+    event.waitUntil(self.registration.showNotification(msg.title || 'Kcal Tracker', {
+        body: msg.body || '',
+        tag: msg.tag || undefined,
+        icon: 'icon-192.png',
+        badge: 'icon-192.png',
+        data: { url: msg.url || './' }
+    }));
+});
+
+// Tippen auf die Nachricht: offene App nach vorne holen, sonst öffnen
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    const url = new URL(event.notification.data?.url || './', self.registration.scope).href;
+    event.waitUntil((async () => {
+        const list = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+        const open = list.find(c => c.url.startsWith(self.registration.scope));
+        if (open) return open.focus();
+        return clients.openWindow(url);
     })());
 });
