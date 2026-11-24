@@ -261,6 +261,16 @@
         <input type="email" id="email-input" placeholder="E-Mail Adresse" autocomplete="email">
         <input type="password" id="password-input" placeholder="Passwort" autocomplete="current-password">
         <button class="btn" id="login-btn">Anmelden / Registrieren</button>
+        <button class="btn btn-sec" id="forgot-btn" type="button" style="margin-top: 10px;">Passwort vergessen?</button>
+    </div>
+
+    <!-- Neues Passwort setzen (nach Link aus der E-Mail) -->
+    <div id="reset-card" class="card hidden">
+        <h2>Neues Passwort</h2>
+        <p class="sub-text">Wähle ein neues Passwort (mindestens 6 Zeichen).</p>
+        <input type="password" id="new-password-input" placeholder="Neues Passwort" autocomplete="new-password">
+        <input type="password" id="new-password-repeat" placeholder="Neues Passwort wiederholen" autocomplete="new-password">
+        <button class="btn" id="reset-save-btn" type="button">Passwort speichern</button>
     </div>
 
     <!-- Onboarding / Ziele -->
@@ -602,9 +612,25 @@
 
     // ---------- Login ----------
 
+    // Kommt der Nutzer über den Link aus der "Passwort zurücksetzen"-E-Mail?
+    let inRecovery = /type=recovery/.test(location.hash + location.search);
+
+    function showResetCard() {
+        inRecovery = true;
+        $('auth-card').classList.add('hidden');
+        $('reset-card').classList.remove('hidden');
+        $('new-password-input').focus();
+    }
+
+    supabase.auth.onAuthStateChange((event) => {
+        if (event === 'PASSWORD_RECOVERY') showResetCard();
+    });
+
     async function checkSession() {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        if (session && inRecovery) {
+            showResetCard();
+        } else if (session) {
             currentSession = session;
             startApp();
         }
@@ -628,12 +654,18 @@
 
             // Unbekannter Nutzer: Konto anlegen
             if (error && error.message.includes('Invalid login credentials')) {
-                if (confirm('Kein Konto gefunden oder falsches Passwort. Neues Konto anlegen?')) {
-                    ({ data, error } = await supabase.auth.signUp({ email, password }));
-                    if (!error && !data.session) {
-                        alert('Konto angelegt. Bitte bestätige deine E-Mail und melde dich dann an.');
-                        return;
-                    }
+                if (!confirm('E-Mail oder Passwort falsch.\n\nNoch kein Konto? Dann OK für "neues Konto anlegen".\nSchon ein Konto? Dann Abbrechen und "Passwort vergessen?" nutzen.')) {
+                    return;
+                }
+                ({ data, error } = await supabase.auth.signUp({ email, password }));
+                // Supabase meldet bei bereits vergebener E-Mail keinen Fehler, sondern einen Nutzer ohne Identitäten
+                if (!error && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+                    alert('Für diese E-Mail gibt es schon ein Konto. Tippe auf "Passwort vergessen?", um ein neues Passwort zu setzen.');
+                    return;
+                }
+                if (!error && !data.session) {
+                    alert('Konto angelegt. Bitte bestätige deine E-Mail und melde dich dann an.');
+                    return;
                 }
             }
 
@@ -653,6 +685,62 @@
             alert('Unerwarteter Fehler: ' + err.message);
         } finally {
             loginBtn.disabled = false;
+        }
+    });
+
+    $('forgot-btn').addEventListener('click', async () => {
+        const email = $('email-input').value.trim();
+        if (!email) {
+            alert('Bitte oben zuerst deine E-Mail-Adresse eingeben.');
+            $('email-input').focus();
+            return;
+        }
+        const btn = $('forgot-btn');
+        btn.disabled = true;
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: location.origin + location.pathname
+            });
+            if (error) {
+                alert('Konnte keine E-Mail senden: ' + error.message);
+                return;
+            }
+            alert('Falls es ein Konto mit dieser E-Mail gibt, ist ein Link zum Zurücksetzen unterwegs. Öffne ihn auf diesem Gerät. Schau auch im Spam-Ordner nach.');
+        } catch (err) {
+            alert('Unerwarteter Fehler: ' + err.message);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    $('reset-save-btn').addEventListener('click', async () => {
+        const pw = $('new-password-input').value;
+        const pw2 = $('new-password-repeat').value;
+        if (pw.length < 6) { alert('Das Passwort muss mindestens 6 Zeichen haben.'); return; }
+        if (pw !== pw2) { alert('Die beiden Passwörter stimmen nicht überein.'); return; }
+        const btn = $('reset-save-btn');
+        btn.disabled = true;
+        try {
+            const { error } = await supabase.auth.updateUser({ password: pw });
+            if (error) {
+                alert('Passwort konnte nicht gespeichert werden: ' + error.message);
+                return;
+            }
+            inRecovery = false;
+            history.replaceState(null, '', location.pathname);
+            $('reset-card').classList.add('hidden');
+            alert('Neues Passwort gespeichert. Du bist angemeldet.');
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                currentSession = session;
+                startApp();
+            } else {
+                $('auth-card').classList.remove('hidden');
+            }
+        } catch (err) {
+            alert('Unerwarteter Fehler: ' + err.message);
+        } finally {
+            btn.disabled = false;
         }
     });
 
