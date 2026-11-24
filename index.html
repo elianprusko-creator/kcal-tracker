@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
     <title>Kcal & Protein Tracker</title>
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
@@ -290,8 +290,15 @@
             justify-content: center;
             z-index: 100;
         }
-        .chat-container { width: 100%; max-width: 480px; display: flex; gap: 8px; align-items: center; }
-        .chat-container input[type="text"] { margin-bottom: 0; flex: 1; min-width: 0; }
+        .chat-container { width: 100%; max-width: 480px; display: flex; gap: 8px; align-items: flex-end; }
+        /* Mehrzeiliges Eingabefeld: wächst mit dem Text (bis ca. 6 Zeilen), danach scrollt es */
+        #food-input {
+            flex: 1; min-width: 0; margin: 0; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--field); color: var(--text); font: inherit; font-size: 16px; line-height: 22px;
+            box-sizing: border-box; resize: none; height: 46px; max-height: 150px; overflow-y: auto; display: block;
+        }
+        /* Beim Schreiben: Foto/Barcode ausblenden, damit der Text die volle Breite hat */
+        .chat-container.typing .photo-btn { display: none; }
         .chat-inner { width: 100%; max-width: 480px; }
         .photo-btn { width: auto; padding: 10px 12px; flex-shrink: 0; display: flex; align-items: center; }
         .photo-btn.has-file { background: var(--warn); }
@@ -572,7 +579,7 @@
                     <rect x="12" y="0" width="1" height="18"/><rect x="15" y="0" width="2" height="18"/><rect x="19" y="0" width="1" height="18"/>
                 </svg>
             </button>
-            <input type="text" id="food-input" placeholder="Was hast du gegessen?" autocomplete="off" enterkeyhint="send">
+            <textarea id="food-input" rows="1" placeholder="Was hast du gegessen?" autocomplete="off" enterkeyhint="send"></textarea>
             <button class="btn send-btn" id="send-btn">Senden</button>
         </div>
     </div>
@@ -2130,12 +2137,35 @@
     });
 
     $('food-input').addEventListener('keydown', (event) => {
-        // Enter sendet – außer ein Vorschlag ist per Pfeiltaste markiert (siehe Vorschläge)
-        if (event.key === 'Enter' && suggestIndex < 0) {
+        // Enter sendet (Umschalt+Enter = neue Zeile) – außer ein Vorschlag ist per Pfeiltaste markiert
+        if (event.key === 'Enter' && !event.shiftKey && suggestIndex < 0) {
             event.preventDefault();
             $('send-btn').click();
         }
     });
+
+    // Eingabefeld wächst mit dem Text; beim Schreiben bekommt es die volle Breite
+    function fitFoodInput() {
+        const el = $('food-input');
+        // Foto/Barcode bleiben sichtbar, solange ein Foto angehängt ist (orangener 📷 als Hinweis)
+        const hasPhoto = $('image-input').files.length > 0;
+        el.closest('.chat-container').classList.toggle('typing', el.value.trim() !== '' && !hasPhoto);
+        el.style.height = '';
+        if (el.value) el.style.height = Math.min(el.scrollHeight + 2, 150) + 'px';
+    }
+    $('food-input').addEventListener('input', fitFoodInput);
+    $('image-input').addEventListener('change', fitFoodInput);
+
+    // iPhone: Die Tastatur schiebt sich über fixierte Leisten – Leiste über der Tastatur halten
+    if (window.visualViewport) {
+        const keepAboveKeyboard = () => {
+            const vv = window.visualViewport;
+            const covered = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+            $('chat-footer').style.bottom = covered > 0 ? covered + 'px' : '';
+        };
+        visualViewport.addEventListener('resize', keepAboveKeyboard);
+        visualViewport.addEventListener('scroll', keepAboveKeyboard);
+    }
 
     // Bild auf max. 1280 px (lange Seite) als JPEG verkleinern; liefert eine data:-URL
     function shrinkImage(file, maxSide = 1280, quality = 0.82) {
@@ -2279,6 +2309,7 @@
 
         if (result.queued) showToast('Offline gespeichert – wird hochgeladen, sobald du wieder Netz hast.');
         $('food-input').value = '';
+        fitFoodInput();
         $('image-input').value = '';
         $('photo-btn').classList.remove('has-file');
         hidePreview();

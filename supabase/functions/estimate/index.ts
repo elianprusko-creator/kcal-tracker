@@ -55,6 +55,13 @@ Zusammengesetzte Gerichte (z. B. Lasagne, Döner, Pizza) bleiben ein Eintrag, au
 Lies die Eingabe als ganzen Satz: Wörter wie "dazwischen", "darauf", "drauf", "mit", "dazu" beziehen sich auf das vorher Genannte.
 Mengen ohne Zahl passend zum Zusammenhang schätzen, z. B. Aufstrich auf Brot: Butter ca. 5 g pro Scheibe,
 Erdnussbutter/Nuss-Nougat-Creme/Marmelade ca. 10–15 g pro Scheibe; zwischen 2 Scheiben (Sandwich) zählt eine Schicht.
+Selbst zubereitet: Öl, Butter, Marinade, Soße, Panade, Stärke/Mehl, Zucker, Käse usw. IMMER als eigene Einträge aufführen,
+nie stillschweigend in die Hauptzutat einrechnen. Ohne Mengenangabe realistisch schätzen (z. B. Marinade für 400 g Fleisch
+ca. 2 EL = 20 g Öl, 1 EL Speisestärke = 10 g) und in note nennen.
+Wurde nur ein Teil gegessen ("die Hälfte", "ein Drittel"), ALLE Zutaten entsprechend anteilig ansetzen.
+Rohgewicht vs. gegart: Packungsangaben und "roh" sind Rohgewicht – dann Werte für rohes Lebensmittel verwenden
+(generic z. B. "Hähnchenbrust roh"). Wurde nach dem Garen gewogen (Airfryer, Pfanne, Grill, Ofen), Werte für das gegarte
+Lebensmittel verwenden (Fleisch verliert beim Garen ca. 25–30 % Wasser, pro Gramm also mehr kcal; generic z. B. "Hähnchenbrust gegart").
 Felder pro Eintrag:
 - name: kurzer deutscher Name, wie gemeint (mit Marke, falls genannt)
 - generic: allgemeiner deutscher Lebensmittelname ohne Marke im Singular, z. B. "Banane", "Reis gekocht", "Hähnchenbrust", "Milch"
@@ -64,7 +71,8 @@ Felder pro Eintrag:
 - kcal, protein_g, carbs_g, fat_g: Werte für die gesamte Menge aus deinem Wissen
 - confidence: "hoch", "mittel" oder "niedrig"
 - note: kurz, welche Annahme du getroffen hast
-- needs_search: true bei Markenprodukten, Fertiggerichten, Restaurant-/Fastfood-Gerichten oder wenn du die Werte nicht sicher kennst, sonst false
+- needs_search: true NUR bei Markenprodukten, gekauften Fertiggerichten oder Restaurant-/Fastfood-Gerichten.
+  Selbst gekochtes und einzelne Grundzutaten immer false (du kennst die Werte gut genug).
 Ohne Mengenangabe: übliche Portion annehmen und in note nennen.
 Antwort als JSON: {"items":[{"name":"","generic":"","brand":null,"grams":0,"amount":"","kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0,"confidence":"","note":"","needs_search":false}]}`;
 
@@ -290,8 +298,13 @@ Deno.serve(async (req) => {
       const toSearch: AiItem[] = [];
       parsed.items.forEach((a, i) => {
         const grams = Number(a.grams) || 0;
-        const food = !a.brand && grams ? findFood(a.generic) || findFood(a.name) : null;
-        if (food) items.push(fromTable(food, grams, withGrams(a.amount, grams), a.note || ""));
+        const food = !a.brand && grams ? findFood(a.name) || findFood(a.generic) : null;
+        // Tabelle nur übernehmen, wenn sie zur KI-Schätzung passt. Weicht die KI deutlich ab, hat sie meist
+        // etwas mitgerechnet, das die Tabelle nicht kennt (Marinade, Zubereitung) -> dann der KI glauben.
+        const tableKcal = food ? food.kcal * grams / 100 : 0;
+        const aiKcal = Number(a.kcal) || 0;
+        const fits = food && (!aiKcal || Math.abs(aiKcal - tableKcal) <= Math.max(25, tableKcal * 0.2));
+        if (food && fits) items.push(fromTable(food, grams, withGrams(a.amount, grams), a.note || ""));
         else if (offResults[i]) items.push(offResults[i]!);
         else if (a.needs_search || a.brand) toSearch.push(a);
         else items.push(fromAi(a, "ki"));
