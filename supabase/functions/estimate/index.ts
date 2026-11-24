@@ -154,6 +154,8 @@ type GeminiOpts = { key: string | null; search?: boolean; timeoutMs?: number; tr
 
 // Kein KI-Schlüssel für diesen Nutzer (Freunde ohne eigenen Schlüssel)
 class NeedKeyError extends Error {}
+// Schlüssel abgelehnt (gelöscht, gesperrt, falsch)
+class KeyInvalidError extends Error {}
 
 // deno-lint-ignore no-explicit-any
 async function gemini(parts: unknown[], opts: GeminiOpts): Promise<{ json: any; sources: Source[] }> {
@@ -189,7 +191,7 @@ async function gemini(parts: unknown[], opts: GeminiOpts): Promise<{ json: any; 
       lastError = friendlyError(res.r.status, res.d?.error?.message || "");
       console.log(`Gemini ${order[i]}: ${res.r.status} ${res.d?.error?.message || ""}`.slice(0, 300));
       if (/API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(JSON.stringify(res.d?.error || ""))) {
-        throw new Error("Der KI-Schlüssel ist ungültig oder gesperrt. Bitte in den Einstellungen prüfen.");
+        throw new KeyInvalidError("Der KI-Schlüssel ist ungültig oder gesperrt.");
       }
       if (!RETRY_STATUS.has(res.r.status)) {
         retryable = false;
@@ -370,6 +372,7 @@ async function openFoodFacts(a: AiItem): Promise<Item | null> {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const started = Date.now();
+  let usedOwnKey = false;
   try {
     // Nur eingeloggte Nutzer (der publishable Key allein reicht nicht)
     const apikey = req.headers.get("apikey") || Deno.env.get("SUPABASE_ANON_KEY") || "";
@@ -382,6 +385,7 @@ Deno.serve(async (req) => {
     // oder geloggt) – sonst der Server-Schlüssel, aber nur für die Besitzer der App
     const owners = (Deno.env.get("OWNER_USER_IDS") || "").split(",").map((s) => s.trim()).filter(Boolean);
     const ownKey = (req.headers.get("x-gemini-key") || "").trim();
+    usedOwnKey = !!ownKey;
     const key = ownKey || (owners.includes(user.id) ? Deno.env.get("GEMINI_API_KEY") || null : null);
     await loadFoods(apikey, req.headers.get("Authorization") || "");
 
@@ -463,6 +467,8 @@ Deno.serve(async (req) => {
 
     return out({ items, sources, ai_calls: aiCalls, ms: Date.now() - started });
   } catch (e) {
-    return out({ error: e instanceof Error ? e.message : String(e), retry: e instanceof RetryError, need_key: e instanceof NeedKeyError });
+    return out({ error: e instanceof Error ? e.message : String(e), retry: e instanceof RetryError, need_key: e instanceof NeedKeyError,
+      // nur der eigene Schlüssel des Nutzers -> App wechselt in den Suchmodus
+      invalid_key: e instanceof KeyInvalidError && usedOwnKey });
   }
 });

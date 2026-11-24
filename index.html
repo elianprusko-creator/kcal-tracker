@@ -2329,6 +2329,13 @@
             throw Object.assign(new Error(message), { retry });
         }
         if (data.need_key) setAiMode('none');
+        // Eigener Schlüssel wurde abgelehnt (gelöscht/gesperrt) -> entfernen, KI-Funktionen ausblenden
+        if (data.invalid_key && ownAiKey()) {
+            localStorage.removeItem(userKey('geminiKey'));
+            setAiMode('none');
+            showToast('Dein KI-Schlüssel funktioniert nicht mehr – Suchmodus ist an. Neu eintragen unter Mehr → KI.');
+            throw new Error('Dein KI-Schlüssel funktioniert nicht mehr. Du bist jetzt im Suchmodus.');
+        }
         if (data.error) throw Object.assign(new Error(data.error), { retry: !!data.retry });
         return data;
     }
@@ -2372,7 +2379,7 @@
         $('mode-bar').className = 'mode-bar' + (ai ? ' ai' : '');
         $('mode-bar').innerHTML = ai
             ? `<span class="mode-pill">✨ KI-Modus</span><span>${mode === 'own' ? 'dein Schlüssel' : ''}</span>`
-            : `<span class="mode-pill">🔍 Suchmodus · ohne KI</span><button type="button" id="mode-bar-setup">KI einrichten</button>`;
+            : `<span class="mode-pill">🔍 Suchmodus</span>`;
         $('food-input').placeholder = ai ? 'Was hast du gegessen?' : 'Lebensmittel suchen …';
         $('send-btn').innerText = ai ? 'Senden' : 'Suchen';
         $('ai-tip-card').classList.toggle('hidden', ai || !!readStore(userKey('aiTipHidden'), false));
@@ -2409,9 +2416,6 @@
         $('ai-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    $('mode-bar').addEventListener('click', (event) => {
-        if (event.target.id === 'mode-bar-setup') openAiCard();
-    });
     $('ai-tip-setup').addEventListener('click', openAiCard);
     $('ai-tip-later').addEventListener('click', () => {
         writeStore(userKey('aiTipHidden'), true);
@@ -3857,6 +3861,7 @@
             ? 'Mengen am besten roh/ungekocht angeben, so wie du einkaufst und abwiegst.'
             : 'Ohne KI-Schlüssel werden nur Grundzutaten aus der Tabelle erkannt (z. B. „200 g Reis“). Alles andere trägst du selbst ein.';
         $('recipe-save-btn').innerText = recipe ? 'Änderungen speichern' : 'Rezept speichern';
+        $('recipe-calc-btn').innerText = recipeCalcLabel();
         renderRecipeRows();
         openKitchenTab('recipes');
         $('recipe-editor').classList.remove('hidden');
@@ -3894,6 +3899,9 @@
             `Pro Portion (${fmtNum(servings)}): <b>${fmt(per.kcal)} kcal</b> · ${fmtNum(per.protein_g)} g Eiweiß · ` +
             `${fmtNum(per.carbs_g)} g KH · ${fmtNum(per.fat_g)} g Fett${per.grams ? ` · ≈ ${Math.round(per.grams)} g` : ''}`;
     }
+
+    // Ohne KI erkennt die App nur Grundzutaten aus der Tabelle
+    const recipeCalcLabel = () => hasAi() ? 'Berechnen & hinzufügen' : 'Grundzutaten erkennen';
 
     $('recipe-servings').addEventListener('input', renderRecipeTotal);
 
@@ -3950,7 +3958,7 @@
                 : 'Ohne KI-Schlüssel konnten nicht alle Zutaten erkannt werden. Schreib Grundzutaten mit Menge (z. B. „200 g Reis, 2 Eier“) oder tippe auf „Selbst eintragen“.');
         } finally {
             btn.disabled = false;
-            btn.innerText = 'Berechnen & hinzufügen';
+            btn.innerText = recipeCalcLabel();
         }
     });
 
