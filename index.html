@@ -323,6 +323,24 @@
         .ai-privacy { border-top: 1px solid var(--border); padding-top: 10px; font-size: 14px; }
         .link-btn { background: none; border: none; color: var(--danger); font-size: 13px; padding: 6px 0; cursor: pointer; }
         .tip-card { border: 1px solid var(--accent); }
+        /* Reiter */
+        .tabs { display: flex; gap: 4px; background: var(--field); border-radius: 10px; padding: 4px; position: sticky; top: 0; z-index: 50; }
+        .tabs button { flex: 1; background: none; border: none; color: var(--mute); padding: 8px 4px; font: inherit; font-size: 14px;
+            font-weight: 600; border-radius: 8px; cursor: pointer; }
+        .tabs button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+        .view { display: flex; flex-direction: column; gap: 16px; }
+        .view.hidden { display: none; }
+        /* Küche im eigenen Reiter: aufgeklappt, ohne Kopfzeile zum Zuklappen */
+        #kitchen-view #kitchen-card > summary { pointer-events: none; }
+        #kitchen-view #kitchen-card > summary::after { display: none; }
+        /* Glocke + Fenster für Erinnerungen */
+        .bell-btn { position: relative; filter: grayscale(1); opacity: 0.6; }
+        .bell-btn.on { filter: none; opacity: 1; }
+        .sheet { position: fixed; inset: 0; z-index: 300; background: rgba(0, 0, 0, 0.45); display: flex; align-items: flex-end; justify-content: center; }
+        .sheet.hidden { display: none; }
+        .sheet-box { width: 100%; max-width: 520px; max-height: 88vh; overflow-y: auto; box-sizing: border-box; margin: 0;
+            border-radius: 16px 16px 0 0; padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
+        @media (min-width: 560px) { .sheet { align-items: center; } .sheet-box { border-radius: 16px; } }
         .link-btn.accent { color: var(--accent); text-align: left; }
         /* Küche */
         .kitchen-tabs { display: flex; margin-bottom: 10px; }
@@ -446,12 +464,21 @@
         <div class="topbar">
             <h1>Tracker <span class="badge hidden" id="offline-badge"></span></h1>
             <div>
+                <button class="icon-btn bell-btn" id="bell-btn" title="Erinnerungen" aria-label="Erinnerungen">🔔</button>
                 <button class="icon-btn" id="theme-btn" title="Hell/Dunkel">◐</button>
                 <button class="icon-btn" id="settings-btn" title="Ziele ändern">⚙</button>
                 <button class="icon-btn" id="logout-btn" style="font-size: 13px;">Abmelden</button>
             </div>
         </div>
 
+        <nav class="tabs" id="tabs">
+            <button type="button" data-view="today" class="active">Heute</button>
+            <button type="button" data-view="progress">Fortschritt</button>
+            <button type="button" data-view="kitchen" class="hidden" id="tab-kitchen">Küche</button>
+            <button type="button" data-view="more">Mehr</button>
+        </nav>
+
+        <div class="view" data-view="today">
         <div class="daynav">
             <button class="icon-btn" id="prev-day-btn" title="Vorheriger Tag">‹</button>
             <span class="daynav-label" id="day-label">Heute</span>
@@ -589,6 +616,9 @@
             <div class="chips" id="copy-yesterday" style="margin: 12px 0 0;"></div>
         </div>
 
+        </div>
+
+        <div class="view hidden" data-view="progress">
         <!-- Statistik -->
         <div class="card">
             <div class="card-head">
@@ -618,6 +648,11 @@
             <p class="preview-note" style="margin: 6px 0 0;">Kalorien- und Eiweißziel passen sich automatisch an dein Gewicht an.</p>
         </div>
 
+        </div>
+
+        <div class="view hidden" data-view="kitchen" id="kitchen-view"></div>
+
+        <div class="view hidden" data-view="more">
         <!-- Gemerkte Gerichte -->
         <details class="card" id="meals-card">
             <summary><h3>Meine Gerichte <span class="sub-text" id="meals-count"></span></h3></summary>
@@ -715,6 +750,7 @@
                     <input type="password" id="ai-key-input" placeholder="AIza…" autocomplete="off" spellcheck="false" style="margin: 0;">
                     <button type="button" class="btn btn-small" id="ai-key-save-btn" style="flex: 0 0 auto;">Prüfen &amp; speichern</button>
                 </div>
+                <p class="preview-note" style="margin: 6px 0 0;">Schlüssel holen: <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">aistudio.google.com/apikey ↗</a> (offizielle Google-Seite)</p>
                 <button type="button" class="link-btn hidden" id="ai-key-remove-btn">Schlüssel von diesem Gerät entfernen</button>
 
                 <details class="ai-guide">
@@ -737,8 +773,12 @@
         </details>
 
         <!-- Erinnerungen (Push) -->
-        <details class="card" id="remind-card">
-            <summary><h3>Erinnerungen <span class="sub-text" id="remind-state"></span></h3></summary>
+        <div class="sheet hidden" id="remind-sheet" role="dialog" aria-modal="true" aria-labelledby="remind-title">
+            <div class="sheet-box card" id="remind-card">
+                <div class="card-head">
+                    <h3 id="remind-title" style="margin: 0;">🔔 Erinnerungen <span class="sub-text" id="remind-state"></span></h3>
+                    <button class="icon-btn" id="remind-close-btn" title="Schließen">✕</button>
+                </div>
             <div style="margin-top: 10px;">
                 <p class="preview-note" id="remind-push-hint" style="margin: 0 0 10px;"></p>
                 <button type="button" class="btn btn-sec hidden" id="remind-enable-btn" style="margin-bottom: 12px;">🔔 Push-Nachrichten auf diesem Handy erlauben</button>
@@ -772,7 +812,8 @@
                     <button type="button" class="btn btn-sec" id="remind-test-btn">Test senden</button>
                 </div>
             </div>
-        </details>
+            </div>
+        </div>
 
         <!-- Export -->
         <details class="card" id="data-card">
@@ -783,6 +824,7 @@
                 <button type="button" class="btn btn-sec" id="export-days-btn">Tagesübersicht</button>
             </div>
         </details>
+        </div>
     </div>
 </main>
 
@@ -1235,6 +1277,7 @@
         syncPush();
         refreshAiMode();
         loadKitchen();
+        loadReminders();
         if (!profile || !profile.kcal_goal) {
             showOnboarding();
         } else {
@@ -1376,6 +1419,7 @@
         $('onboarding').classList.add('hidden');
         $('app').classList.remove('hidden');
         $('chat-footer').classList.remove('hidden');
+        showView('today');
         loadDay();
         loadWeights();
         if (!suggestLoaded) loadSuggestData();
@@ -2289,6 +2333,26 @@
         return data;
     }
 
+    // ---------- Reiter ----------
+
+    let currentView = 'today';
+
+    function showView(view) {
+        if (view === 'kitchen' && !kitchen.on) view = 'more';
+        currentView = view;
+        document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+        document.querySelectorAll('#app .view').forEach(v => v.classList.toggle('hidden', v.dataset.view !== view));
+        // Eingabeleiste gehört zu "Heute"; in den anderen Reitern stört sie nur
+        $('chat-footer').classList.toggle('hidden', view !== 'today');
+    }
+
+    $('tabs').addEventListener('click', (event) => {
+        const b = event.target.closest('button[data-view]');
+        if (!b) return;
+        showView(b.dataset.view);
+        window.scrollTo({ top: 0 });
+    });
+
     // ---------- KI-Modus / Suchmodus ----------
     // 'own' = eigener Schlüssel (nur auf diesem Gerät), 'server' = Schlüssel der App (nur Besitzer), 'none' = Suchmodus
     let aiMode = 'server';
@@ -2312,6 +2376,8 @@
         $('food-input').placeholder = ai ? 'Was hast du gegessen?' : 'Lebensmittel suchen …';
         $('send-btn').innerText = ai ? 'Senden' : 'Suchen';
         $('ai-tip-card').classList.toggle('hidden', ai || !!readStore(userKey('aiTipHidden'), false));
+        // Besitzer nutzen den Schlüssel der App -> Karte nicht nötig
+        $('ai-card').classList.toggle('hidden', mode === 'server');
         renderAiCard();
     }
 
@@ -2338,6 +2404,7 @@
     }
 
     function openAiCard() {
+        showView('more');
         $('ai-card').open = true;
         $('ai-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -2401,6 +2468,7 @@
     }
 
     function showStatus(text, isError, canRetry = isError) {
+        if (currentView !== 'today') showView('today');
         $('status-card').classList.remove('hidden');
         $('status-card').classList.toggle('error', !!isError);
         $('status-text').innerText = text;
@@ -2580,6 +2648,7 @@
     // Vorschau: nichts wird ohne Bestätigung gespeichert
     // item.chips = Mengen-Schnellwahl [{ label, factor, amount }] relativ zu den Startwerten
     function showPreview(items, sources, info = {}) {
+        showView('today');
         const calls = info.ai_calls ?? null;
         $('preview-meta').innerText = calls === null ? '' :
             `(${calls === 0 ? 'ohne KI' : calls === 1 ? '1 KI-Aufruf' : calls + ' KI-Aufrufe'}` +
@@ -3112,6 +3181,7 @@
     }
 
     async function openScanner() {
+        showView('today');
         hidePreview();
         hideStatus();
         hideSuggestions();
@@ -3482,6 +3552,7 @@
         $('kitchen-suggest').checked = kitchen.inSuggest;
         $('kitchen-remind').checked = kitchen.inReminders;
         $('recipe-from-preview-btn').classList.toggle('hidden', !kitchen.on);
+        placeKitchenCard();
         renderFridge();
         renderRecipes();
     }
@@ -3570,12 +3641,17 @@
 
     // ----- Ein-/Ausschalten, Einstellungen, Tabs -----
 
+    $('kitchen-card').addEventListener('toggle', () => {
+        if (kitchen.on && !$('kitchen-card').open && $('kitchen-card').parentElement === $('kitchen-view')) $('kitchen-card').open = true;
+    });
+
     $('kitchen-on-btn').addEventListener('click', async () => {
         kitchen.on = true;
         renderKitchen();
         await saveKitchenPrefs();
         await loadKitchenData();
-        showToast('Küche ist an');
+        showView('kitchen');
+        showToast('Küche ist an – eigener Reiter oben');
     });
 
     $('kitchen-off-btn').addEventListener('click', async () => {
@@ -3598,7 +3674,23 @@
         document.querySelectorAll('#kitchen-main [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== btn.dataset.tab));
     }));
 
+    // Eingeschaltet: eigener Reiter "Küche"; ausgeschaltet: Einführung unter "Mehr"
+    function placeKitchenCard() {
+        const card = $('kitchen-card');
+        $('tab-kitchen').classList.toggle('hidden', !kitchen.on);
+        if (kitchen.on) {
+            if (card.parentElement !== $('kitchen-view')) $('kitchen-view').appendChild(card);
+            card.open = true;
+        } else if (card.parentElement === $('kitchen-view')) {
+            const more = document.querySelector('#app .view[data-view="more"]');
+            more.insertBefore(card, $('ai-card'));
+            card.open = false;
+            if (currentView === 'kitchen') showView('more');
+        }
+    }
+
     function openKitchenTab(tab) {
+        showView('kitchen');
         $('kitchen-card').open = true;
         document.querySelector(`.kitchen-tabs button[data-tab="${tab}"]`).click();
     }
@@ -4074,12 +4166,32 @@
         $('remind-water-every').value = String(s.water?.every || 120);
         remindMeals = s.meals?.length ? s.meals : planMeals($('remind-wake').value, $('remind-sleep').value, profile?.goal);
         renderRemindMeals();
-        $('remind-state').innerText = data?.enabled ? '· an' : '';
+        setRemindState(data?.enabled);
     }
 
-    $('remind-card').addEventListener('toggle', () => {
-        if ($('remind-card').open) loadReminders();
+    function openReminders() {
+        $('remind-sheet').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+        loadReminders();
+    }
+
+    function closeReminders() {
+        $('remind-sheet').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    document.body.appendChild($('remind-sheet'));
+    $('bell-btn').addEventListener('click', openReminders);
+    $('remind-close-btn').addEventListener('click', closeReminders);
+    $('remind-sheet').addEventListener('click', (event) => {
+        if (event.target === $('remind-sheet')) closeReminders();
     });
+
+    function setRemindState(enabled) {
+        $('remind-state').innerText = enabled ? '· an' : '';
+        $('bell-btn').classList.toggle('on', !!enabled);
+        $('bell-btn').title = enabled ? 'Erinnerungen (an)' : 'Erinnerungen (aus)';
+    }
 
     // Aufstehzeit geändert -> Essenszeiten gleich mitverschieben
     ['remind-wake', 'remind-sleep'].forEach(id => $(id).addEventListener('change', () => $('remind-recalc-btn').click()));
@@ -4108,7 +4220,7 @@
         }
         remindMeals.sort((a, b) => a.time.localeCompare(b.time));
         renderRemindMeals();
-        $('remind-state').innerText = enabled ? '· an' : '';
+        setRemindState(enabled);
         showToast(enabled ? 'Erinnerungen gespeichert' : 'Erinnerungen ausgeschaltet');
     });
 
