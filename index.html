@@ -302,6 +302,13 @@
         .chat-inner { width: 100%; max-width: 480px; }
         .photo-btn { width: auto; padding: 10px 12px; flex-shrink: 0; display: flex; align-items: center; }
         .photo-btn.has-file { background: var(--warn); }
+        .attach-menu { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
+            margin-bottom: 8px; background: var(--card); max-width: 260px; }
+        .attach-menu.hidden { display: none; }
+        .attach-menu label, .attach-menu button { padding: 12px 14px; font-size: 15px; cursor: pointer; color: var(--text);
+            background: none; border: none; border-bottom: 1px solid var(--border); text-align: left; font-family: inherit; }
+        .attach-menu > :last-child { border-bottom: none; }
+        .attach-menu label:hover, .attach-menu button:hover { background: var(--field); }
         .send-btn { width: auto; padding: 12px 16px; flex-shrink: 0; }
     </style>
 </head>
@@ -570,8 +577,14 @@
 <div class="chat-footer hidden" id="chat-footer">
     <div class="chat-inner">
         <div class="suggest hidden" id="suggest-list"></div>
+        <div class="attach-menu hidden" id="attach-menu">
+            <label for="camera-input">📷 Foto aufnehmen</label>
+            <label for="image-input">🖼️ Aus Galerie wählen</label>
+            <button type="button" class="hidden" id="photo-remove-btn">✕ Foto entfernen</button>
+        </div>
         <div class="chat-container">
-            <label for="image-input" class="btn photo-btn" id="photo-btn" title="Foto hinzufügen">📷</label>
+            <button type="button" class="btn photo-btn" id="photo-btn" title="Foto hinzufügen" aria-label="Foto hinzufügen">📷</button>
+            <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
             <input type="file" id="image-input" accept="image/*" class="hidden">
             <button class="btn photo-btn" id="scan-btn" title="Barcode scannen" aria-label="Barcode scannen">
                 <svg width="20" height="18" viewBox="0 0 20 18" fill="currentColor" aria-hidden="true">
@@ -2039,15 +2052,34 @@
         if (error) {
             // Fehlermeldung der Function aus der Antwort lesen, falls vorhanden
             let message = error.message;
+            let retry = /FunctionsFetchError|FunctionsRelayError/.test(error.name || '') || /^5\d\d$/.test(String(error.context?.status || ''));
             try {
                 const body = await error.context.json();
                 if (body.error) message = body.error;
+                if (body.retry) retry = true;
             } catch (e) {}
             if (message === 'Nicht angemeldet.') message = 'Sitzung abgelaufen. Bitte ab- und wieder anmelden.';
-            throw new Error(message);
+            throw Object.assign(new Error(message), { retry });
         }
-        if (data.error) throw new Error(data.error);
+        if (data.error) throw Object.assign(new Error(data.error), { retry: !!data.retry });
         return data;
+    }
+
+    // Wie processWithGemini, aber bei Überlastung/Verbindungsabbruch selbst bis zu 2× neu versuchen
+    async function invokeWithRetry(payload, onRetry, isCancelled = () => false) {
+        const started = Date.now();
+        for (let attempt = 0; ; attempt++) {
+            try {
+                return await processWithGemini(payload);
+            } catch (err) {
+                // nicht endlos warten: nach 45 s oder offline lieber die Meldung zeigen
+                const again = err.retry && attempt < 2 && navigator.onLine && Date.now() - started < 45000 && !isCancelled();
+                if (!again) throw err;
+                onRetry(attempt + 1);
+                await new Promise(r => setTimeout(r, 2000 + attempt * 2000));
+                if (isCancelled()) throw err;
+            }
+        }
     }
 
     function showStatus(text, isError, canRetry = isError) {
@@ -2069,9 +2101,11 @@
         hidePreview();
 
         const started = Date.now();
+        let retries = 0;
         const tick = () => {
             const s = Math.round((Date.now() - started) / 1000);
-            showStatus(s < 15 ? `Analysiere … ${s} s` : `Analysiere … ${s} s – die KI braucht gerade länger`);
+            showStatus(retries ? `KI ausgelastet – neuer Versuch (${retries}) … ${s} s`
+                : s < 15 ? `Analysiere … ${s} s` : `Analysiere … ${s} s – die KI braucht gerade länger`);
         };
         tick();
         clearInterval(statusTimer);
@@ -2081,7 +2115,7 @@
         let result = null;
         let errorMessage = '';
         try {
-            result = await processWithGemini(payload);
+            result = await invokeWithRetry(payload, n => { retries = n; tick(); }, () => seq !== analyzeSeq);
         } catch (err) {
             errorMessage = err.message;
         }
@@ -2110,18 +2144,42 @@
         if (lastPayload) analyze(lastPayload);
     });
 
-    $('image-input').addEventListener('change', () => {
-        $('photo-btn').classList.toggle('has-file', $('image-input').files.length > 0);
+    // Foto: direkt mit der Kamera oder aus der Galerie (beides landet in pickedImage)
+    let pickedImage = null;
+
+    function setPickedImage(file) {
+        pickedImage = file || null;
+        $('photo-btn').classList.toggle('has-file', !!pickedImage);
+        $('photo-btn').title = pickedImage ? 'Foto angehängt – tippen zum Ändern' : 'Foto hinzufügen';
+        $('photo-remove-btn').classList.toggle('hidden', !pickedImage);
+        $('attach-menu').classList.add('hidden');
+        fitFoodInput();
+    }
+
+    ['camera-input', 'image-input'].forEach(id => $(id).addEventListener('change', () => {
+        const file = $(id).files[0];
+        $(id).value = ''; // gleiche Datei nochmal wählbar
+        if (file) setPickedImage(file);
+    }));
+
+    $('photo-btn').addEventListener('click', (event) => {
+        event.stopPropagation();
+        hideSuggestions();
+        $('attach-menu').classList.toggle('hidden');
+    });
+    $('photo-remove-btn').addEventListener('click', () => setPickedImage(null));
+    // Menü schließen beim Tippen woanders (die Labels öffnen Kamera/Galerie und schließen es danach)
+    document.addEventListener('click', (event) => {
+        if (!event.target.closest('#attach-menu')) $('attach-menu').classList.add('hidden');
     });
 
     $('send-btn').addEventListener('click', async () => {
         if ($('send-btn').disabled) return;
-        const imageInput = $('image-input');
         const text = $('food-input').value.trim();
         let imagePayload = null;
 
-        if (imageInput.files && imageInput.files[0]) {
-            const file = imageInput.files[0];
+        if (pickedImage) {
+            const file = pickedImage;
             // Handyfotos (mehrere MB) verkleinern: schnellerer Upload, schnellere KI
             const small = await shrinkImage(file).catch(() => null);
             const base64 = small || await toBase64(file);
@@ -2148,13 +2206,12 @@
     function fitFoodInput() {
         const el = $('food-input');
         // Foto/Barcode bleiben sichtbar, solange ein Foto angehängt ist (orangener 📷 als Hinweis)
-        const hasPhoto = $('image-input').files.length > 0;
+        const hasPhoto = !!pickedImage;
         el.closest('.chat-container').classList.toggle('typing', el.value.trim() !== '' && !hasPhoto);
         el.style.height = '';
         if (el.value) el.style.height = Math.min(el.scrollHeight + 2, 150) + 'px';
     }
     $('food-input').addEventListener('input', fitFoodInput);
-    $('image-input').addEventListener('change', fitFoodInput);
 
     // iPhone: Die Tastatur schiebt sich über fixierte Leisten – Leiste über der Tastatur halten
     if (window.visualViewport) {
@@ -2207,7 +2264,7 @@
             `${info.ms ? ', ' + (info.ms / 1000).toFixed(1).replace('.', ',') + ' s' : ''})`;
         $('preview-list').innerHTML = items.map(item => `
             <div class="preview-item" data-scale data-amount="${esc(item.amount)}" data-source="${esc(item.source || 'ki')}"
-                 data-grams="${esc(item.grams || '')}"
+                 data-grams="${esc(item.grams || '')}" data-barcode="${esc(item.barcode || '')}"
                  data-init="${esc(JSON.stringify([Number(item.grams) || 0, ...NUTRIENTS.map(f => Number(item[f]) || 0)]))}">
                 ${item.chips && item.chips.length ? `
                     <div class="chips">
@@ -2261,9 +2318,16 @@
         const chip = event.target.closest('.chip');
         if (!chip) return;
         const el = chip.closest('.preview-item');
-        const [grams, ...values] = JSON.parse(el.dataset.init);
-        const factor = Number(chip.dataset.factor);
+        let [grams, ...values] = JSON.parse(el.dataset.init);
+        let factor = Number(chip.dataset.factor);
         const round1 = v => Math.round(v * 10) / 10;
+        // Von Hand korrigierte Nährwerte (z. B. kcal) bleiben beim Wechsel der Menge erhalten
+        const baseGrams = Number(el.dataset.baseGrams);
+        if (grams && baseGrams) {
+            values = JSON.parse(el.dataset.base);
+            factor = (grams * factor) / baseGrams;
+            grams = baseGrams;
+        }
         el.querySelector('[data-field="grams"]').value = grams ? round1(grams * factor) : '';
         NUTRIENTS.forEach((f, i) => {
             el.querySelector(`[data-field="${f}"]`).value = i === 0 ? Math.round(values[i] * factor) : round1(values[i] * factor);
@@ -2296,6 +2360,7 @@
         const saveBtn = $('preview-save-btn');
         const meal = $('preview-meal').value;
         const rows = readPreviewRows().map(row => ({ ...row, meal }));
+        rememberProductCorrections();
 
         saveBtn.disabled = true;
         const result = await insertEntries(rows);
@@ -2310,8 +2375,7 @@
         if (result.queued) showToast('Offline gespeichert – wird hochgeladen, sobald du wieder Netz hast.');
         $('food-input').value = '';
         fitFoodInput();
-        $('image-input').value = '';
-        $('photo-btn').classList.remove('has-file');
+        setPickedImage(null);
         hidePreview();
         loadDay();
     });
@@ -2716,66 +2780,178 @@
         else $('scan-hint').innerText = 'Bitte die komplette Nummer unter dem Barcode eingeben (8 oder 13 Ziffern).';
     });
 
-    async function lookupBarcode(code) {
-        showStatus(`Suche Produkt ${code} …`, false);
-        $('status-retry-btn').classList.add('hidden');
-        let product = null;
+    // Gescannte Produkte merken (auf diesem Gerät): Nährwerte pro 100 g, Portionen und deine Korrekturen.
+    // Beim nächsten Scan desselben Produkts geht es dann sofort, ohne Internet-Abfrage und ohne KI.
+    const productKey = code => `kcal:product:${code}`;
+
+    function readProduct(code) {
+        try { return JSON.parse(localStorage.getItem(productKey(code))); } catch (e) { return null; }
+    }
+
+    // Open Food Facts direkt abfragen. Liefert { product } (null = nicht eingetragen) oder { error }
+    async function fetchOff(code) {
         const url = `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(code)}.json` +
-            '?fields=product_name,product_name_de,brands,nutriments,serving_quantity,product_quantity';
+            '?fields=product_name,product_name_de,brands,nutriments,serving_quantity,serving_size,product_quantity,quantity,categories';
         let lastErr = null;
         // Zwei Versuche; Zeitlimit per AbortController (AbortSignal.timeout fehlt auf älteren Handys)
-        for (let attempt = 0; attempt < 2 && !product; attempt++) {
+        for (let attempt = 0; attempt < 2; attempt++) {
             const ctrl = new AbortController();
             const timer = setTimeout(() => ctrl.abort(), 12000);
             try {
                 const r = await fetch(url, { signal: ctrl.signal });
                 if (!r.ok && r.status !== 404) throw new Error('HTTP ' + r.status);
                 const d = await r.json();
-                lastErr = null;
-                if (d.status === 1) product = d.product;
-                break; // Antwort erhalten (gefunden oder nicht) -> kein zweiter Versuch
+                const p = d.status === 1 ? d.product : null;
+                const n = p?.nutriments || {};
+                if (!p || n['energy-kcal_100g'] == null) return { product: null };
+                const brand = (p.brands || '').split(',')[0].trim();
+                return {
+                    product: {
+                        name: p.product_name_de || p.product_name || 'Produkt',
+                        brand,
+                        package_g: num(p.product_quantity) || null,
+                        quantity: p.quantity || '',
+                        serving_g: num(p.serving_quantity) || null,
+                        serving_size: p.serving_size || '',
+                        categories: String(p.categories || '').split(',').slice(-2).join(', ').trim(),
+                        per100: {
+                            kcal: Number(n['energy-kcal_100g']) || 0,
+                            protein_g: Number(n.proteins_100g || 0),
+                            carbs_g: Number(n.carbohydrates_100g || 0),
+                            fat_g: Number(n.fat_100g || 0)
+                        },
+                        source: 'off',
+                        source_url: `https://world.openfoodfacts.org/product/${encodeURIComponent(code)}`,
+                        note: ''
+                    }
+                };
             } catch (err) {
                 lastErr = err;
             } finally {
                 clearTimeout(timer);
             }
         }
-        if (lastErr) {
-            const why = lastErr.name === 'AbortError' ? 'Zeitüberschreitung' : (lastErr.message || String(lastErr));
-            showStatus(`Open Food Facts ist gerade nicht erreichbar (${why}). Beschreib das Produkt stattdessen im Textfeld.`, true, false);
-            return;
+        return { error: lastErr.name === 'AbortError' ? 'Zeitüberschreitung' : (lastErr.message || String(lastErr)) };
+    }
+
+    // KI: sinnvolle Portionen (Stück, Riegel, Glas …) für ein bekanntes Produkt
+    async function fetchPortions(p) {
+        const data = await processWithGemini({ product: {
+            name: p.name, brand: p.brand, quantity: p.quantity || (p.package_g ? p.package_g + ' g' : ''),
+            serving: p.serving_size || (p.serving_g ? p.serving_g + ' g' : ''), categories: p.categories
+        } });
+        return data.portions || [];
+    }
+
+    async function lookupBarcode(code) {
+        const seq = ++analyzeSeq; // "Abbrechen" in der Statuskarte gilt auch hier
+        const cancelled = () => seq !== analyzeSeq;
+        const status = text => {
+            showStatus(text, false);
+            $('status-retry-btn').classList.add('hidden');
+        };
+        status(`Suche Produkt ${code} …`);
+
+        let p = readProduct(code);
+        if (!p) {
+            const off = await fetchOff(code);
+            if (cancelled()) return;
+            p = off.product;
+            if (!p) {
+                // Nicht bei Open Food Facts -> KI sucht die Nummer im Internet
+                status(off.error
+                    ? `Open Food Facts nicht erreichbar (${off.error}) – suche im Internet …`
+                    : 'Nicht bei Open Food Facts – suche im Internet … (dauert ein paar Sekunden)');
+                try {
+                    const data = await invokeWithRetry({ product: { code } },
+                        n => status(`KI ausgelastet – suche nochmal im Internet (Versuch ${n + 1}) …`), cancelled);
+                    if (cancelled()) return;
+                    if (data.product) {
+                        const a = data.product;
+                        p = {
+                            name: a.name, brand: a.brand || '', package_g: a.package_g || null,
+                            per100: { kcal: a.kcal_100g, protein_g: a.protein_100g, carbs_g: a.carbs_100g, fat_g: a.fat_100g },
+                            portions: data.portions || [],
+                            source: 'ki_suche',
+                            source_url: (data.sources || []).find(s => /^https?:\/\//.test(s.url || ''))?.url || '',
+                            note: [a.note, 'per Internet-Suche gefunden – Werte kurz mit der Packung vergleichen'].filter(Boolean).join(' · ')
+                        };
+                    }
+                } catch (err) {
+                    if (cancelled()) return;
+                    showStatus(`Produkt ${code} nicht gefunden (${err.message}). Beschreib es im Textfeld oder fotografiere die Nährwerttabelle.`, true, false);
+                    return;
+                }
+                if (!p) {
+                    showStatus(`Produkt ${code} nicht gefunden. Beschreib es im Textfeld oder fotografiere die Nährwerttabelle (📷) und schreib dazu, wie viel du gegessen hast.`, true, false);
+                    return;
+                }
+            }
         }
 
-        const n = product?.nutriments || {};
-        if (!product || n['energy-kcal_100g'] == null) {
-            showStatus(`Produkt ${code} ist bei Open Food Facts nicht (vollständig) eingetragen. Beschreib es stattdessen im Textfeld.`, true, false);
-            return;
+        // Portionen fehlen noch -> kurz bei der KI nachfragen (höchstens 8 s warten, sonst ohne)
+        if (!p.portions) {
+            status('Produkt gefunden – suche passende Portionsgrößen …');
+            const job = fetchPortions(p).then(list => { p.portions = list; }).catch(() => {});
+            await Promise.race([job, new Promise(r => setTimeout(r, 8000))]);
+            if (cancelled()) return;
+            // kam die Antwort zu spät, wenigstens fürs nächste Mal merken
+            if (!p.portions) job.then(() => { if (p.portions) writeStore(productKey(code), p); });
         }
-
-        const serving = num(product.serving_quantity);
-        const pkg = num(product.product_quantity);
-        const grams = serving || 100;
-        const k = grams / 100;
-        const brand = (product.brands || '').split(',')[0].trim();
-        const options = [];
-        if (serving) options.push({ label: `1 Portion (${fmtNum(serving)} g)`, grams: serving });
-        options.push({ label: '100 g', grams: 100 });
-        if (pkg && pkg !== serving && pkg !== 100) options.push({ label: `Packung (${fmtNum(pkg)} g)`, grams: pkg });
+        writeStore(productKey(code), p);
 
         hideStatus();
-        showPreview([{
-            name: `${product.product_name_de || product.product_name || 'Produkt'}${brand ? ` (${brand})` : ''}`,
-            amount: serving ? `1 Portion (${fmtNum(serving)} g)` : '100 g',
-            grams,
-            kcal: Math.round(Number(n['energy-kcal_100g']) * k),
-            protein_g: Math.round(Number(n.proteins_100g || 0) * k * 10) / 10,
-            carbs_g: Math.round(Number(n.carbohydrates_100g || 0) * k * 10) / 10,
-            fat_g: Math.round(Number(n.fat_100g || 0) * k * 10) / 10,
-            source: 'off',
-            source_url: `https://world.openfoodfacts.org/product/${encodeURIComponent(code)}`,
-            note: `Barcode ${code}`,
-            chips: options.map(o => ({ label: o.label, factor: o.grams / grams, amount: o.label }))
-        }], [], {});
+        showPreview([productItem(code, p)], [], {});
+    }
+
+    function productItem(code, p) {
+        const g = n => fmtNum(n);
+        const options = [];
+        const add = (label, grams, isDefault) => {
+            grams = Math.round(Number(grams) * 10) / 10;
+            if (!(grams > 0) || options.some(o => Math.abs(o.grams - grams) < 0.5)) return;
+            options.push({ label, grams, isDefault: !!isDefault });
+        };
+        (p.portions || []).forEach(o => add(`${o.label} (${g(o.grams)} g)`, o.grams, o.default));
+        if (p.serving_g) add(`Portion lt. Packung (${g(p.serving_g)} g)`, p.serving_g);
+        add('100 g', 100);
+        if (p.package_g) add(`Ganze Packung (${g(p.package_g)} g)`, p.package_g);
+
+        // Startmenge: übliche Portion laut KI, sonst laut Packung, sonst 100 g
+        const start = options.find(o => o.isDefault) || options.find(o => o.grams === p.serving_g) || options.find(o => o.grams === 100);
+        const k = start.grams / 100;
+        const r1 = v => Math.round(v * 10) / 10;
+        return {
+            name: `${p.name}${p.brand && !p.name.toLowerCase().includes(p.brand.toLowerCase()) ? ` (${p.brand})` : ''}`,
+            amount: start.label,
+            grams: start.grams,
+            kcal: Math.round(p.per100.kcal * k),
+            protein_g: r1(p.per100.protein_g * k),
+            carbs_g: r1(p.per100.carbs_g * k),
+            fat_g: r1(p.per100.fat_g * k),
+            source: p.source || 'off',
+            source_url: p.source_url,
+            barcode: code,
+            note: [`Barcode ${code}`, p.corrected ? 'mit deiner Korrektur' : '', p.note].filter(Boolean).join(' · '),
+            chips: options.map(o => ({ label: o.label, factor: o.grams / start.grams, amount: o.label }))
+        };
+    }
+
+    // Hast du kcal/Makros eines gescannten Produkts korrigiert, gilt das ab jetzt für dieses Produkt
+    function rememberProductCorrections() {
+        $('preview-list').querySelectorAll('.preview-item[data-barcode]').forEach(el => {
+            const code = el.dataset.barcode;
+            const p = code && readProduct(code);
+            const val = f => num(el.querySelector(`[data-field="${f}"]`).value);
+            const grams = val('grams');
+            if (!p || !grams) return;
+            const per100 = Object.fromEntries(NUTRIENTS.map(f => [f, Math.round(val(f) / grams * 1000) / 10]));
+            const changed = NUTRIENTS.some(f => Math.abs(per100[f] - p.per100[f]) > Math.max(0.5, p.per100[f] * 0.03));
+            if (!changed) return;
+            p.per100 = per100;
+            p.corrected = true;
+            writeStore(productKey(code), p);
+        });
     }
 
     // ---------- Offline-Modus ----------

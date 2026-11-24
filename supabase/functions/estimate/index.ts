@@ -110,8 +110,12 @@ type Source = { title?: string; url?: string };
 const THINKING_LEVELS = ["minimal", "low", null];
 let thinkingIdx = 0;
 
-const RETRY_STATUS = new Set([429, 500, 503, 504]);
+// 429 = Limit, 5xx = überlastet, 404 = Modellname unbekannt (dann gleich das andere Modell)
+const RETRY_STATUS = new Set([404, 429, 500, 502, 503, 504]);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Fehler, bei denen sich ein neuer Versuch lohnt (die App versucht es dann selbst noch einmal)
+class RetryError extends Error {}
 
 function friendlyError(status: number, message: string): string {
   if (status === 503 || /overload|high demand|spikes/i.test(message)) {
@@ -146,43 +150,135 @@ async function callGemini(model: string, parts: unknown[], search: boolean, time
   return { r, d };
 }
 
-async function gemini(parts: unknown[], search: boolean, timeoutMs?: number): Promise<{ items: AiItem[]; sources: Source[] }> {
+type GeminiOpts = { search?: boolean; timeoutMs?: number; tries?: number; budgetMs?: number };
+
+// deno-lint-ignore no-explicit-any
+async function gemini(parts: unknown[], opts: GeminiOpts = {}): Promise<{ json: any; sources: Source[] }> {
   if (!Deno.env.get("GEMINI_API_KEY")) throw new Error("GEMINI_API_KEY fehlt in den Supabase-Secrets.");
+  const search = !!opts.search;
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
   const fallback = Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-lite-latest";
+  const timeoutMs = opts.timeoutMs ?? (search ? 30000 : 20000);
 
-  // Bei Überlastung: kurz warten und nochmal, dann auf das kleinere Modell ausweichen.
-  // Die Suche bekommt nur einen Versuch, weil es ohne sie eine Schätzung als Ersatz gibt.
-  const attempts = search ? [model] : [model, model, fallback].filter((m, i, a) => i < 2 || m !== a[0]);
+  // Überlastung dauert meist nur Sekunden und trifft selten beide Modelle gleichzeitig:
+  // abwechselnd Haupt- und Ersatzmodell mit wachsender Pause, bis das Zeitbudget aufgebraucht ist.
+  const order = [model, fallback, model, fallback, model, fallback];
+  const pauses = [0, 300, 1500, 2500, 4000, 6000];
+  const tries = Math.min(opts.tries ?? order.length, order.length);
+  const deadline = Date.now() + (opts.budgetMs ?? 55000);
   // deno-lint-ignore no-explicit-any
   let d: any = null;
   let lastError = "";
-  for (let i = 0; i < attempts.length; i++) {
+  let retryable = true;
+  for (let i = 0; i < tries; i++) {
+    if (i > 0) {
+      // nur weiter, wenn danach noch genug Zeit für eine Antwort bleibt
+      if (Date.now() + pauses[i] + 8000 > deadline) break;
+      await sleep(pauses[i]);
+    }
     try {
-      const res = await callGemini(attempts[i], parts, search, timeoutMs ?? (search ? 30000 : 20000));
+      const res = await callGemini(order[i], parts, search, Math.min(timeoutMs, deadline - Date.now()));
       if (res.r.ok) {
         d = res.d;
         break;
       }
       lastError = friendlyError(res.r.status, res.d?.error?.message || "");
-      if (!RETRY_STATUS.has(res.r.status)) break;
+      console.log(`Gemini ${order[i]}: ${res.r.status} ${res.d?.error?.message || ""}`.slice(0, 300));
+      if (!RETRY_STATUS.has(res.r.status)) {
+        retryable = false;
+        break;
+      }
     } catch (e) {
       if (!(e instanceof DOMException && e.name === "TimeoutError")) throw e;
+      console.log(`Gemini ${order[i]}: Zeitüberschreitung`);
       lastError = "Die KI antwortet gerade nicht (Zeitüberschreitung). Bitte nochmal versuchen.";
     }
-    if (i === 0) await sleep(1500);
   }
-  if (!d) throw new Error(lastError);
+  if (!d) throw retryable ? new RetryError(lastError) : new Error(lastError);
 
   const c = d.candidates?.[0];
   const raw = (c?.content?.parts || []).map((p: { text?: string }) => p.text || "").join("");
   const m = raw.match(/\{[\s\S]*\}/);
-  if (!m) throw new Error("Antwort nicht lesbar. Versuche es nochmal.");
+  if (!m) throw new RetryError("Antwort nicht lesbar. Versuche es nochmal.");
   const sources = (c?.groundingMetadata?.groundingChunks || [])
     .map((g: { web?: { title?: string; uri?: string } }) => g.web)
     .filter(Boolean)
     .map((w: { title?: string; uri?: string }) => ({ title: w.title, url: w.uri }));
-  return { items: JSON.parse(m[0]).items || [], sources };
+  try {
+    return { json: JSON.parse(m[0]), sources };
+  } catch {
+    throw new RetryError("Antwort nicht lesbar. Versuche es nochmal.");
+  }
+}
+
+// ---------- Barcode-Produkte ----------
+
+const PORTION_RULES = `Mengen-Auswahl (portions): 3–5 sinnvolle Mengen, wie man genau dieses Produkt typischerweise isst/trinkt,
+jeweils mit Gewicht in Gramm (Getränke in ml). Nutze die natürliche Einheit des Produkts, z. B.
+Schokoladentafel: "1 Stück" (ein Rechteck), "1 Reihe", "½ Tafel"; Riegel/Kekse/Pralinen: "1 Riegel", "1 Keks", "3 Kekse";
+Chips/Nüsse: "1 Handvoll", "1 kleine Schüssel"; Müsli/Cornflakes: "1 Schüssel"; Joghurt/Pudding: "1 Becher";
+Getränke: "1 Glas (250 ml)", "1 Flasche"; Brot/Käse/Wurst: "1 Scheibe"; Aufstrich: "für 1 Brot"; Eis: "1 Kugel".
+Stückgewicht wenn möglich aus Packungsgröße ÷ Stückzahl der Packung berechnen (z. B. 100-g-Tafel mit 24 Stücken = ca. 4 g).
+Labels kurz und ohne Grammzahl. Genau ein Eintrag bekommt default:true: die Menge, die man üblicherweise auf einmal isst.`;
+
+const PORTIONS_PROMPT = `Du bist ein präziser Ernährungsassistent. Zu einem Supermarkt-Produkt brauche ich sinnvolle Mengen-Auswahlen.
+${PORTION_RULES}
+Antwort als JSON: {"portions":[{"label":"","grams":0,"default":false}]}`;
+
+const BARCODE_PROMPT = `Recherchiere per Google das Lebensmittel mit der Barcode-/EAN-Nummer unten (meist in Deutschland verkauft):
+Produktname, Marke, Packungsgröße und Nährwerte pro 100 g (bzw. 100 ml) laut Hersteller oder Händler.
+Setze found nur auf true, wenn du sicher bist, dass das Produkt zu GENAU dieser Nummer gehört; sonst found:false.
+${PORTION_RULES}
+Antworte NUR mit JSON, ohne Markdown und ohne Text davor oder danach:
+{"found":true,"name":"","brand":"","package_g":0,"kcal_100g":0,"protein_100g":0,"carbs_100g":0,"fat_100g":0,
+"portions":[{"label":"","grams":0,"default":false}],"note":"kurz: Quelle"}`;
+
+type Portion = { label: string; grams: number; default?: boolean };
+
+function cleanPortions(list: unknown): Portion[] {
+  if (!Array.isArray(list)) return [];
+  return list
+    .map((p) => ({ label: String(p?.label || "").trim().slice(0, 40), grams: r1(p?.grams), default: !!p?.default }))
+    .filter((p) => p.label && p.grams > 0 && p.grams < 5000)
+    .slice(0, 6);
+}
+
+type ProductReq = { code?: string; name?: string; brand?: string; quantity?: string; serving?: string; categories?: string };
+
+async function product(req: ProductReq) {
+  // Produkt bekannt (Open Food Facts) -> nur Portionen aus dem Wissen der KI, ohne Suche (schnell)
+  if (req.name) {
+    const info = [
+      `Produkt: ${req.name}`,
+      req.brand && `Marke: ${req.brand}`,
+      req.quantity && `Packungsinhalt: ${req.quantity}`,
+      req.serving && `Portionsangabe auf der Packung: ${req.serving}`,
+      req.categories && `Kategorie: ${req.categories}`,
+    ].filter(Boolean).join("\n");
+    const res = await gemini([{ text: `${PORTIONS_PROMPT}\n\n${info}` }], { timeoutMs: 12000, budgetMs: 25000 });
+    return { portions: cleanPortions(res.json.portions), sources: [] };
+  }
+
+  // Unbekannt -> Google-Suche nach der Nummer
+  const code = String(req.code || "").replace(/\D/g, "");
+  if (code.length < 8) throw new Error("Ungültige Barcode-Nummer.");
+  const res = await gemini([{ text: `${BARCODE_PROMPT}\n\nNummer: ${code}` }], { search: true, tries: 2, budgetMs: 60000 });
+  const j = res.json;
+  if (!j.found || !(Number(j.kcal_100g) >= 0) || !j.name) return { product: null, sources: res.sources.slice(0, 4) };
+  return {
+    product: {
+      name: String(j.name),
+      brand: j.brand ? String(j.brand) : "",
+      package_g: r1(j.package_g) || null,
+      kcal_100g: r1(j.kcal_100g),
+      protein_100g: r1(j.protein_100g),
+      carbs_100g: r1(j.carbs_100g),
+      fat_100g: r1(j.fat_100g),
+      note: j.note ? String(j.note).slice(0, 200) : "",
+    },
+    portions: cleanPortions(j.portions),
+    sources: res.sources.slice(0, 4),
+  };
 }
 
 // "2 Stück" -> "2 Stück (≈ 240 g)", damit die Grammzahl immer sichtbar ist
@@ -276,7 +372,9 @@ Deno.serve(async (req) => {
     if (!auth.ok) return out({ error: "Nicht angemeldet." }, 401);
     await loadFoods(apikey, req.headers.get("Authorization") || "");
 
-    const { text, image } = await req.json();
+    const body = await req.json();
+    if (body.product) return out({ ...(await product(body.product)), ms: Date.now() - started });
+    const { text, image } = body;
     if (!text && !image) return out({ error: "Leere Eingabe." });
 
     const items: Item[] = [];
@@ -294,7 +392,8 @@ Deno.serve(async (req) => {
       if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.data } });
       aiCalls++;
       // Bilder brauchen bei der KI länger als Text
-      const parsed = await gemini(parts, false, image ? 28000 : undefined);
+      const res = await gemini(parts, { timeoutMs: image ? 28000 : 20000 });
+      const parsed = { items: (res.json.items || []) as AiItem[] };
 
       // 3. Markenprodukte bei Open Food Facts – alle gleichzeitig abfragen
       const offResults = await Promise.all(
@@ -323,7 +422,9 @@ Deno.serve(async (req) => {
         const list = toSearch.map((a) => ({ name: a.name, brand: a.brand, grams: a.grams, amount: a.amount }));
         try {
           aiCalls++;
-          const found = await gemini([{ text: `${SEARCH_PROMPT}\n\n${JSON.stringify(list)}` }], true);
+          // nur ein Versuch: ohne Suche gibt es die Schätzung aus Schritt 2 als Ersatz
+          const res = await gemini([{ text: `${SEARCH_PROMPT}\n\n${JSON.stringify(list)}` }], { search: true, tries: 1 });
+          const found = { items: (res.json.items || []) as AiItem[], sources: res.sources };
           toSearch.forEach((a, i) => {
             const f = found.items[i];
             items.push(f ? fromAi({ ...f, name: f.name || a.name }, "ki_suche") : fromAi(a, "ki"));
@@ -338,6 +439,6 @@ Deno.serve(async (req) => {
 
     return out({ items, sources, ai_calls: aiCalls, ms: Date.now() - started });
   } catch (e) {
-    return out({ error: e instanceof Error ? e.message : String(e) });
+    return out({ error: e instanceof Error ? e.message : String(e), retry: e instanceof RetryError });
   }
 });
