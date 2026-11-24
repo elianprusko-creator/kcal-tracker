@@ -230,6 +230,53 @@
         .chart-val { font-size: 10px; fill: var(--mute); }
         .chart-avg { font-size: 13px; color: var(--mute); margin-top: 8px; }
 
+        .chart-axis { font-size: 10px; fill: var(--mute); }
+
+        /* Schnell eintragen */
+        .quick { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+        .quick::-webkit-scrollbar { display: none; }
+        .quick .chip { white-space: nowrap; flex-shrink: 0; }
+        .chip small { color: var(--mute); margin-left: 3px; }
+        .chip:disabled { opacity: 0.5; }
+
+        /* Mahlzeiten-Gruppen */
+        .group-head { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 700; color: var(--mute);
+            text-transform: uppercase; letter-spacing: 0.04em; margin-top: 14px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+        .group-head span:last-child { text-transform: none; letter-spacing: 0; font-weight: 600; }
+        .entry-item.pending { opacity: 0.65; }
+
+        /* Wasser */
+        .summary { flex-wrap: wrap; row-gap: 0; }
+        .water { flex-basis: 100%; display: flex; align-items: center; gap: 8px; margin-top: 14px; padding-top: 12px;
+            border-top: 1px solid var(--border); font-size: 14px; }
+        .water-text { flex: 1; min-width: 0; }
+        .water.done .water-text { color: var(--accent); font-weight: 600; }
+        .water .btn-small { padding: 4px 9px; }
+
+        /* Statistik */
+        .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+        .seg button { background: none; border: none; color: var(--mute); padding: 5px 10px; font-size: 13px; cursor: pointer; }
+        .seg button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+        .stat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+        .stat { background: var(--field); border-radius: 10px; padding: 10px 12px; }
+        .stat b { display: block; font-size: 18px; }
+        .stat span { font-size: 12px; color: var(--mute); }
+
+        /* Gewicht */
+        .weight-line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+        .weight-dot { fill: var(--accent); }
+        .weight-trend { fill: none; stroke: var(--mute); stroke-width: 1.5; stroke-dasharray: 4 3; }
+
+        /* Hinweis unten */
+        .toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+            background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 14px; z-index: 200;
+            display: flex; gap: 14px; align-items: center; width: max-content; max-width: calc(100% - 32px); box-sizing: border-box;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25); }
+        .toast button { background: none; border: none; color: var(--accent); font-weight: 700; font-size: 14px; cursor: pointer; padding: 0; flex-shrink: 0; }
+        :root:not([data-theme="dark"]) .toast button { color: #2ae8b3; }
+        @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .toast button { color: #0b9e76; } }
+        :root[data-theme="dark"] .toast button { color: #0b9e76; }
+
         /* Chatleiste */
         .chat-footer {
             position: fixed;
@@ -332,7 +379,7 @@
     <!-- App -->
     <div id="app" class="hidden" style="display: flex; flex-direction: column; gap: 16px;">
         <div class="topbar">
-            <h1>Tracker</h1>
+            <h1>Tracker <span class="badge hidden" id="offline-badge"></span></h1>
             <div>
                 <button class="icon-btn" id="theme-btn" title="Hell/Dunkel">◐</button>
                 <button class="icon-btn" id="settings-btn" title="Ziele ändern">⚙</button>
@@ -365,6 +412,17 @@
                 <div class="bar"><div class="bar-fill" id="protein-fill" style="width: 0%;"></div></div>
                 <div class="macros" id="macros-text">KH 0 g · Fett 0 g</div>
             </div>
+            <div class="water" id="water-row">
+                <span class="water-text" id="water-text">💧 0 / 2,5 l</span>
+                <button type="button" class="btn btn-sec btn-small" id="water-minus" aria-label="Wasser weniger">−</button>
+                <button type="button" class="btn btn-small" id="water-plus" aria-label="250 ml Wasser">+ 250 ml</button>
+            </div>
+        </div>
+
+        <!-- Schnell eintragen -->
+        <div class="card hidden" id="quick-card" style="padding: 12px 14px;">
+            <div class="preview-note" style="margin-bottom: 8px;">Schnell eintragen · ein Tipp trägt die letzte Menge ein</div>
+            <div class="quick" id="quick-list"></div>
         </div>
 
         <!-- Barcode-Scanner -->
@@ -399,6 +457,10 @@
         <div class="card hidden" id="preview-card">
             <h3>Vorschau prüfen</h3>
             <p class="sub-text" style="margin-bottom: 4px;">Werte bei Bedarf anpassen, dann speichern. <span id="preview-meta"></span></p>
+            <div class="row" style="align-items: center; margin: 8px 0 4px;">
+                <label for="preview-meal" style="flex: 0 0 auto; margin: 0;">Mahlzeit</label>
+                <select id="preview-meal" class="meal-select" style="margin: 0;"></select>
+            </div>
             <div id="preview-list"></div>
             <div class="sources" id="preview-sources"></div>
             <div class="meal-save hidden" id="meal-save">
@@ -432,6 +494,8 @@
                     <div><label for="f-fat">Fett g</label><input type="number" id="f-fat" data-field="fat_g" step="0.1" inputmode="decimal" min="0"></div>
                 </div>
                 <p class="preview-note" style="margin: 0 0 10px;">Menge ändern rechnet kcal und Makros automatisch um.</p>
+                <label for="f-meal">Mahlzeit</label>
+                <select id="f-meal" class="meal-select"></select>
                 <div class="row">
                     <button type="button" class="btn btn-sec" id="f-cancel-btn">Abbrechen</button>
                     <button type="submit" class="btn" id="f-save-btn">Speichern</button>
@@ -440,13 +504,36 @@
             <div id="entries-list">
                 <p class="sub-text">Keine Einträge vorhanden.</p>
             </div>
+            <div class="chips" id="copy-yesterday" style="margin: 12px 0 0;"></div>
         </div>
 
-        <!-- 7-Tage-Chart -->
+        <!-- Statistik -->
         <div class="card">
-            <h3>Letzte 7 Tage</h3>
+            <div class="card-head">
+                <h3>Statistik</h3>
+                <div class="seg" id="range-seg">
+                    <button type="button" data-range="7" class="active">7 Tage</button>
+                    <button type="button" data-range="30">30 Tage</button>
+                </div>
+            </div>
             <svg class="chart" id="week-chart" viewBox="0 0 320 150"></svg>
             <div class="chart-avg" id="week-avg"></div>
+            <div class="stat-grid" id="stat-grid"></div>
+        </div>
+
+        <!-- Gewicht -->
+        <div class="card" id="weight-card">
+            <div class="card-head">
+                <h3>Gewicht</h3>
+                <span class="entry-kcal" id="weight-current"></span>
+            </div>
+            <svg class="chart hidden" id="weight-chart" viewBox="0 0 320 140"></svg>
+            <div class="chart-avg" id="weight-info" style="margin-top: 4px;"></div>
+            <div class="row" style="margin-top: 12px;">
+                <input type="number" id="weight-input" step="0.1" min="30" max="300" inputmode="decimal" placeholder="Gewicht heute (kg)" style="margin: 0;">
+                <button type="button" class="btn btn-small" id="weight-save-btn" style="flex: 0 0 auto;">Eintragen</button>
+            </div>
+            <p class="preview-note" style="margin: 6px 0 0;">Kalorien- und Eiweißziel passen sich automatisch an dein Gewicht an.</p>
         </div>
 
         <!-- Gemerkte Gerichte -->
@@ -454,8 +541,23 @@
             <summary><h3>Meine Gerichte <span class="sub-text" id="meals-count"></span></h3></summary>
             <div id="meals-list" style="margin-top: 8px;"></div>
         </details>
+
+        <!-- Export -->
+        <details class="card" id="data-card">
+            <summary><h3>Daten exportieren</h3></summary>
+            <p class="sub-text" style="margin: 8px 0 12px;">CSV-Dateien zum Öffnen in Excel, Numbers oder Google Sheets – als Sicherung oder für Arzt/Trainer.</p>
+            <div class="row">
+                <button type="button" class="btn btn-sec" id="export-entries-btn">Alle Einträge</button>
+                <button type="button" class="btn btn-sec" id="export-days-btn">Tagesübersicht</button>
+            </div>
+        </details>
     </div>
 </main>
+
+<div class="toast hidden" id="toast" role="status">
+    <span id="toast-text"></span>
+    <button type="button" class="hidden" id="toast-action"></button>
+</div>
 
 <!-- Chatleiste -->
 <div class="chat-footer hidden" id="chat-footer">
@@ -502,6 +604,10 @@
     let profile = null;
     let currentDay = todayStr();
     let localEntries = [];
+    let yesterdayEntries = [];   // Vortag, für "Wie gestern"
+    let weightsList = [];        // [{ day, kg }]
+    let waterMl = 0;
+    let dayWasToday = true;      // für automatischen Tageswechsel nach Mitternacht
     let editingId = null;
 
     // Daten für Vorschläge beim Tippen
@@ -590,6 +696,92 @@
         return String(value ?? '').replace(/[&<>"']/g, c => ({
             '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
         }[c]));
+    }
+
+    // ---------- Mahlzeiten ----------
+
+    const MEAL_GROUPS = [['fruehstueck', 'Frühstück'], ['mittag', 'Mittagessen'], ['abend', 'Abendessen'], ['snack', 'Snacks']];
+    const MEAL_LABEL = Object.fromEntries(MEAL_GROUPS);
+
+    // Mahlzeit aus der Uhrzeit: 4–11 Frühstück, 11–15 Mittag, 17–22 Abend, sonst Snack
+    function mealOfTime(date = new Date()) {
+        const h = date.getHours();
+        if (h >= 4 && h < 11) return 'fruehstueck';
+        if (h >= 11 && h < 15) return 'mittag';
+        if (h >= 17 && h < 22) return 'abend';
+        return 'snack';
+    }
+
+    function entryMeal(entry) {
+        if (MEAL_LABEL[entry.meal]) return entry.meal;
+        return mealOfTime(entry.created_at ? new Date(entry.created_at) : new Date());
+    }
+
+    document.querySelectorAll('.meal-select').forEach(sel => {
+        sel.innerHTML = MEAL_GROUPS.map(([k, label]) => `<option value="${k}">${label}</option>`).join('');
+    });
+
+    // ---------- Lokaler Speicher (offline) ----------
+
+    function readStore(key, fallback) {
+        try {
+            const v = localStorage.getItem(key);
+            return v ? JSON.parse(v) : fallback;
+        } catch (e) {
+            return fallback;
+        }
+    }
+
+    function writeStore(key, value) {
+        try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {}
+    }
+
+    const userKey = k => `kcal:${currentSession?.user.id}:${k}`;
+
+    function isNetworkError(error) {
+        return !navigator.onLine || /fetch|network|load failed|internet|offline/i.test(String(error?.message || error || ''));
+    }
+
+    function newId() {
+        if (window.crypto?.randomUUID) return crypto.randomUUID();
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+            const r = Math.random() * 16 | 0;
+            return (c === 'x' ? r : (r & 3) | 8).toString(16);
+        });
+    }
+
+    // Supabase liefert höchstens 1000 Zeilen pro Abfrage -> seitenweise holen
+    async function fetchAll(build) {
+        const out = [];
+        for (let from = 0; ; from += 1000) {
+            const { data, error } = await build().range(from, from + 999);
+            if (error) return { data: null, error };
+            out.push(...data);
+            if (data.length < 1000) return { data: out, error: null };
+        }
+    }
+
+    // ---------- Hinweis unten (Toast) ----------
+
+    let toastTimer = null;
+
+    function showToast(text, actionLabel, action) {
+        $('toast-text').innerText = text;
+        const btn = $('toast-action');
+        btn.classList.toggle('hidden', !actionLabel);
+        btn.innerText = actionLabel || '';
+        btn.onclick = () => {
+            hideToast();
+            if (action) action();
+        };
+        $('toast').classList.remove('hidden');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(hideToast, actionLabel ? 6000 : 3500);
+    }
+
+    function hideToast() {
+        clearTimeout(toastTimer);
+        $('toast').classList.add('hidden');
     }
 
     // ---------- Hell/Dunkel ----------
@@ -757,6 +949,11 @@
         mealsList = [];
         historyMap = new Map();
         suggestLoaded = false;
+        yesterdayEntries = [];
+        weightsList = [];
+        waterMl = 0;
+        hideToast();
+        updateOfflineBadge();
         closeScanner();
         analyzeSeq++;
         hideStatus();
@@ -771,11 +968,20 @@
     async function startApp() {
         $('auth-card').classList.add('hidden');
 
-        const { data, error } = await supabase
+        let { data, error } = await supabase
             .from('profiles')
             .select('*')
             .eq('user_id', currentSession.user.id)
             .maybeSingle();
+
+        // Offline: zuletzt bekanntes Profil verwenden
+        if (error && isNetworkError(error)) {
+            const cached = readStore(userKey('profile'), null);
+            if (cached) {
+                data = cached;
+                error = null;
+            }
+        }
 
         if (error) {
             alert('Profil konnte nicht geladen werden: ' + error.message);
@@ -783,6 +989,10 @@
         }
 
         profile = data;
+        if (profile) writeStore(userKey('profile'), profile);
+        updateOfflineBadge();
+        flushPending();
+        flushWater();
         if (!profile || !profile.kcal_goal) {
             showOnboarding();
         } else {
@@ -913,6 +1123,8 @@
         }
 
         profile = data;
+        writeStore(userKey('profile'), profile);
+        loadWeights();
         showDashboard();
     });
 
@@ -923,6 +1135,7 @@
         $('app').classList.remove('hidden');
         $('chat-footer').classList.remove('hidden');
         loadDay();
+        loadWeights();
         if (!suggestLoaded) loadSuggestData();
     }
 
@@ -937,12 +1150,23 @@
                 .order('created_at', { ascending: false })
                 .limit(1000)
         ]);
-        foodsList = foods.data || [];
-        mealsList = meals.data || [];
+        let src;
+        if (!foods.error && !meals.error && !history.error) {
+            src = { foods: foods.data, meals: meals.data, history: history.data };
+            writeStore(userKey('suggest'), src);
+        } else {
+            // offline: zuletzt geladene Daten, beim nächsten Dashboard-Aufruf neu versuchen
+            src = readStore(userKey('suggest'), { foods: [], meals: [], history: [] });
+            suggestLoaded = false;
+        }
+        foodsList = src.foods || [];
+        mealsList = src.meals || [];
         historyMap = new Map();
         // älteste zuerst, damit "last" am Ende der neueste Eintrag ist
-        (history.data || []).slice().reverse().forEach(addToHistory);
+        (src.history || []).slice().reverse().forEach(addToHistory);
+        pendingEntries().forEach(addToHistory);
         renderMeals();
+        renderQuick();
     }
 
     function addToHistory(entry) {
@@ -952,6 +1176,131 @@
         h.last = entry;
         historyMap.set(key, h);
     }
+
+    function removeFromHistory(entry) {
+        const key = entry.name.trim().toLowerCase();
+        const h = historyMap.get(key);
+        if (!h) return;
+        h.count--;
+        if (h.count <= 0) historyMap.delete(key);
+    }
+
+    // ---------- Speichern mit Offline-Warteschlange ----------
+
+    function pendingEntries() {
+        return currentSession ? readStore(userKey('pending'), []) : [];
+    }
+
+    function setPending(list) {
+        writeStore(userKey('pending'), list);
+        updateOfflineBadge();
+    }
+
+    function updateOfflineBadge() {
+        const n = pendingEntries().length;
+        const off = !navigator.onLine;
+        $('offline-badge').classList.toggle('hidden', !off && !n);
+        $('offline-badge').innerText = off ? (n ? `offline · ${n} wartend` : 'offline') : `${n} wartend`;
+    }
+
+    // Einträge speichern; ohne Netz landen sie in der Warteschlange und werden später hochgeladen
+    async function insertEntries(rows) {
+        const now = Date.now();
+        const full = rows.map((r, i) => ({
+            id: newId(),
+            user_id: currentSession.user.id,
+            day: currentDay,
+            meal: mealOfTime(),
+            ...r,
+            created_at: new Date(now + i).toISOString()
+        }));
+        const { error } = await supabase.from('entries').insert(full);
+        if (error && !isNetworkError(error)) return { ok: false, error };
+        if (error) setPending([...pendingEntries(), ...full]);
+        full.forEach(addToHistory);
+        renderQuick();
+        return { ok: true, queued: !!error, rows: full };
+    }
+
+    let flushing = false;
+    async function flushPending() {
+        const list = pendingEntries();
+        if (!list.length || !currentSession || flushing) return;
+        flushing = true;
+        const { error } = await supabase.from('entries').upsert(list, { onConflict: 'id', ignoreDuplicates: true });
+        flushing = false;
+        if (error) {
+            if (!isNetworkError(error)) console.error('Hochladen der Warteschlange:', error.message);
+            updateOfflineBadge();
+            return;
+        }
+        const ids = new Set(list.map(e => e.id));
+        setPending(pendingEntries().filter(e => !ids.has(e.id)));
+        showToast(list.length === 1 ? '1 Eintrag hochgeladen' : `${list.length} Einträge hochgeladen`);
+        loadDay();
+    }
+
+    async function undoInsert(rows) {
+        const ids = rows.map(r => r.id);
+        setPending(pendingEntries().filter(e => !ids.includes(e.id)));
+        const { error } = await supabase.from('entries').delete().in('id', ids);
+        if (error && !isNetworkError(error)) alert('Rückgängig fehlgeschlagen: ' + error.message);
+        rows.forEach(removeFromHistory);
+        renderQuick();
+        loadDay();
+    }
+
+    window.addEventListener('online', () => {
+        updateOfflineBadge();
+        flushPending();
+        flushWater();
+    });
+    window.addEventListener('offline', updateOfflineBadge);
+
+    // Nur die Nährwerte eines Eintrags (für Kopien)
+    function pickEntry(entry, extra = {}) {
+        return {
+            name: entry.name,
+            amount: entry.amount ?? null,
+            grams: entry.grams ?? null,
+            kcal: Math.round(Number(entry.kcal) || 0),
+            protein_g: Number(entry.protein_g) || 0,
+            carbs_g: Number(entry.carbs_g) || 0,
+            fat_g: Number(entry.fat_g) || 0,
+            source: entry.source || 'manual',
+            ...extra
+        };
+    }
+
+    // ---------- Schnell eintragen ----------
+
+    function renderQuick() {
+        const items = [...historyMap.values()]
+            .sort((a, b) => b.count - a.count || String(b.last.created_at || '').localeCompare(String(a.last.created_at || '')))
+            .slice(0, 10);
+        $('quick-card').classList.toggle('hidden', !items.length);
+        $('quick-list').innerHTML = items.map(h => `
+            <button type="button" class="chip" data-quick="${esc(h.last.name.trim().toLowerCase())}"
+                    title="${esc(h.last.amount || '')}">${esc(h.last.name)} <small>${fmt(h.last.kcal)}</small></button>`).join('');
+    }
+
+    $('quick-list').addEventListener('click', async (event) => {
+        const chip = event.target.closest('[data-quick]');
+        if (!chip || chip.disabled) return;
+        const h = historyMap.get(chip.dataset.quick);
+        if (!h) return;
+        chip.disabled = true;
+        const result = await insertEntries([pickEntry(h.last)]);
+        chip.disabled = false;
+        if (!result.ok) {
+            alert('Speichern fehlgeschlagen: ' + result.error.message);
+            return;
+        }
+        const e = result.rows[0];
+        showToast(`${e.name}${e.amount ? ' (' + e.amount + ')' : ''} eingetragen${result.queued ? ' · offline' : ''}`,
+            'Rückgängig', () => undoInsert(result.rows));
+        loadDay();
+    });
 
     $('prev-day-btn').addEventListener('click', () => changeDay(addDays(currentDay, -1)));
     $('next-day-btn').addEventListener('click', () => changeDay(addDays(currentDay, 1)));
@@ -970,23 +1319,55 @@
         $('day-label').innerText = dayLabel(currentDay);
         $('next-day-btn').disabled = currentDay >= todayStr();
 
-        const { data, error } = await supabase
-            .from('entries')
-            .select('*')
-            .eq('user_id', currentSession.user.id)
-            .eq('day', currentDay)
-            .order('created_at', { ascending: true });
+        const day = currentDay;
+        dayWasToday = day === todayStr();
+        const prev = addDays(day, -1);
+        const uid = currentSession.user.id;
+        const [res, water] = await Promise.all([
+            supabase.from('entries').select('*').eq('user_id', uid)
+                .gte('day', prev).lte('day', day).order('created_at', { ascending: true }),
+            supabase.from('water').select('ml').eq('user_id', uid).eq('day', day).maybeSingle()
+        ]);
+        if (day !== currentDay || !currentSession) return; // inzwischen anderer Tag
 
-        if (error) {
-            console.error('Fehler beim Laden:', error.message);
-            alert('Einträge konnten nicht geladen werden.');
-            return;
+        let rows;
+        if (res.error) {
+            const cached = readStore(userKey('days'), {});
+            if (!isNetworkError(res.error) && !cached[day]) {
+                console.error('Fehler beim Laden:', res.error.message);
+                alert('Einträge konnten nicht geladen werden.');
+                return;
+            }
+            rows = [...(cached[day] || []), ...(cached[prev] || [])];
+        } else {
+            rows = res.data || [];
+            cacheDays(rows, [day, prev]);
         }
 
-        localEntries = data || [];
+        // noch nicht hochgeladene Einträge dazunehmen
+        const ids = new Set(rows.map(r => r.id));
+        const pend = pendingEntries().filter(p => !ids.has(p.id)).map(p => ({ ...p, pending: true }));
+        const all = [...rows, ...pend].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+        localEntries = all.filter(e => e.day === day);
+        yesterdayEntries = all.filter(e => e.day === prev);
+
+        const pw = readStore(userKey('pendingWater'), {});
+        if (pw[day] != null) waterMl = pw[day];
+        else if (!water.error) waterMl = water.data?.ml || 0;
+        else waterMl = readStore(userKey('water'), {})[day] || 0;
+
         renderEntries();
         renderSummary();
-        loadWeek();
+        renderWater();
+        loadStats();
+    }
+
+    // Die zuletzt angesehenen Tage für offline merken (höchstens 21)
+    function cacheDays(rows, days) {
+        const cached = readStore(userKey('days'), {});
+        days.forEach(d => { cached[d] = rows.filter(r => r.day === d); });
+        const keep = Object.keys(cached).sort().slice(-21);
+        writeStore(userKey('days'), Object.fromEntries(keep.map(k => [k, cached[k]])));
     }
 
     function renderSummary() {
@@ -1025,23 +1406,65 @@
 
         if (localEntries.length === 0) {
             list.innerHTML = '<p class="sub-text" style="margin: 8px 0 0;">Keine Einträge vorhanden.</p>';
-            return;
+        } else {
+            list.innerHTML = MEAL_GROUPS.map(([key, label]) => {
+                const items = localEntries.filter(e => entryMeal(e) === key);
+                if (!items.length) return '';
+                const kcal = items.reduce((s, e) => s + Number(e.kcal || 0), 0);
+                const protein = items.reduce((s, e) => s + Number(e.protein_g || 0), 0);
+                return `<div class="group-head"><span>${label}</span><span>${fmt(kcal)} kcal · ${fmt(protein)} g Eiweiß</span></div>` +
+                    items.map(entryRow).join('');
+            }).join('');
         }
+        renderCopyYesterday();
+    }
 
-        list.innerHTML = localEntries.map(entry => `
-            <div class="entry-item">
+    function entryRow(entry) {
+        const meta = entry.pending
+            ? '⏳ wartet auf Upload'
+            : `${fmt(entry.protein_g)} g Eiweiß${SOURCE_LABEL[entry.source] ? ' · ' + SOURCE_LABEL[entry.source] : ''}`;
+        return `
+            <div class="entry-item${entry.pending ? ' pending' : ''}">
                 <div class="entry-main">
                     <div class="entry-name">${esc(entry.name)}</div>
-                    <div class="entry-meta">
-                        ${entry.amount ? esc(entry.amount) + ' · ' : ''}${fmt(entry.protein_g)} g Eiweiß${SOURCE_LABEL[entry.source] ? ' · ' + SOURCE_LABEL[entry.source] : ''}
-                    </div>
+                    <div class="entry-meta">${entry.amount ? esc(entry.amount) + ' · ' : ''}${meta}</div>
                 </div>
                 <span class="entry-kcal">${fmt(entry.kcal)} kcal</span>
                 <button type="button" class="icon-btn" data-edit="${esc(entry.id)}" title="Ändern">✎</button>
                 <button type="button" class="icon-btn" data-delete="${esc(entry.id)}" title="Löschen">✕</button>
-            </div>
-        `).join('');
+            </div>`;
     }
+
+    // "Wie gestern": Mahlzeiten vom Vortag, die heute noch fehlen
+    function renderCopyYesterday() {
+        const groups = MEAL_GROUPS.filter(([key]) =>
+            yesterdayEntries.some(e => entryMeal(e) === key) && !localEntries.some(e => entryMeal(e) === key));
+        const label = currentDay === todayStr() ? 'Wie gestern:' : 'Wie am Vortag:';
+        $('copy-yesterday').innerHTML = groups.length
+            ? `<span class="preview-note" style="width: 100%;">${label}</span>` + groups.map(([key, name]) => {
+                const kcal = yesterdayEntries.filter(e => entryMeal(e) === key).reduce((s, e) => s + Number(e.kcal || 0), 0);
+                return `<button type="button" class="chip" data-copy="${key}">↻ ${name} <small>${fmt(kcal)} kcal</small></button>`;
+            }).join('')
+            : '';
+    }
+
+    $('copy-yesterday').addEventListener('click', async (event) => {
+        const btn = event.target.closest('[data-copy]');
+        if (!btn || btn.disabled) return;
+        const key = btn.dataset.copy;
+        const rows = yesterdayEntries.filter(e => entryMeal(e) === key).map(e => pickEntry(e, { meal: key }));
+        if (!rows.length) return;
+        btn.disabled = true;
+        const result = await insertEntries(rows);
+        btn.disabled = false;
+        if (!result.ok) {
+            alert('Übernehmen fehlgeschlagen: ' + result.error.message);
+            return;
+        }
+        showToast(`${MEAL_LABEL[key]} übernommen (${rows.length} ${rows.length === 1 ? 'Eintrag' : 'Einträge'})${result.queued ? ' · offline' : ''}`,
+            'Rückgängig', () => undoInsert(result.rows));
+        loadDay();
+    });
 
     $('entries-list').addEventListener('click', (event) => {
         const editBtn = event.target.closest('[data-edit]');
@@ -1054,7 +1477,12 @@
     $('f-cancel-btn').addEventListener('click', closeEntryForm);
 
     function openEntryForm(entry) {
+        if (entry?.pending) {
+            alert('Dieser Eintrag wartet noch auf den Upload. Ändern geht, sobald du wieder online bist.');
+            return;
+        }
         editingId = entry ? entry.id : null;
+        $('f-meal').value = entry ? entryMeal(entry) : mealOfTime();
         const grams = entry ? Number(entry.grams) || gramsFromAmount(entry.amount) : 0;
         $('f-name').value = entry?.name || '';
         $('f-grams').value = grams || '';
@@ -1101,15 +1529,21 @@
             kcal: Math.round(num($('f-kcal').value)),
             protein_g: num($('f-protein').value),
             carbs_g: num($('f-carbs').value),
-            fat_g: num($('f-fat').value)
+            fat_g: num($('f-fat').value),
+            meal: $('f-meal').value
         };
 
         $('f-save-btn').disabled = true;
-        const { error } = editingId
-            ? await supabase.from('entries').update(row).eq('id', editingId)
-            : await supabase.from('entries').insert({
-                ...row, user_id: currentSession.user.id, day: currentDay, source: 'manual'
-            });
+        let error = null;
+        let queued = false;
+        if (editingId) {
+            ({ error } = await supabase.from('entries').update(row).eq('id', editingId));
+            if (error && isNetworkError(error)) error = { message: 'Keine Internetverbindung. Ändern geht nur online.' };
+        } else {
+            const result = await insertEntries([{ ...row, source: 'manual' }]);
+            error = result.error || null;
+            queued = !!result.queued;
+        }
         $('f-save-btn').disabled = false;
 
         if (error) {
@@ -1117,12 +1551,24 @@
             return;
         }
 
+        if (queued) showToast('Offline gespeichert – wird hochgeladen, sobald du wieder Netz hast.');
         closeEntryForm();
         loadDay();
     });
 
     async function deleteEntry(id) {
         if (!confirm('Eintrag löschen?')) return;
+
+        // noch nicht hochgeladen: nur aus der Warteschlange nehmen
+        const pend = pendingEntries();
+        if (pend.some(e => String(e.id) === String(id))) {
+            const entry = pend.find(e => String(e.id) === String(id));
+            setPending(pend.filter(e => String(e.id) !== String(id)));
+            removeFromHistory(entry);
+            renderQuick();
+            loadDay();
+            return;
+        }
 
         const { error } = await supabase.from('entries').delete().eq('id', id);
         if (error) {
@@ -1134,38 +1580,106 @@
         loadDay();
     }
 
-    // ---------- 7-Tage-Chart ----------
+    // ---------- Statistik (7 / 30 Tage, Serien) ----------
 
-    async function loadWeek() {
-        const start = addDays(currentDay, -6);
-        const { data, error } = await supabase
-            .from('entries')
-            .select('day, kcal')
-            .eq('user_id', currentSession.user.id)
-            .gte('day', start)
-            .lte('day', currentDay);
+    let statsRange = 7;
+    let statsSeq = 0;
+    const STREAK_DAYS = 120; // so weit zurück werden Serien gezählt
 
+    async function loadStats() {
+        if (!currentSession) return;
+        const seq = ++statsSeq;
+        const today = todayStr();
+        const from = [addDays(today, -(STREAK_DAYS - 1)), addDays(currentDay, -(statsRange - 1))].sort()[0];
+        const uid = currentSession.user.id;
+        const { data, error } = await fetchAll(() => supabase.from('entries')
+            .select('id, day, kcal, protein_g').eq('user_id', uid)
+            .gte('day', from).lte('day', today)
+            .order('day').order('id'));
+        if (seq !== statsSeq) return;
+
+        let rows;
         if (error) {
-            console.error('7-Tage-Daten:', error.message);
-            return;
+            rows = readStore(userKey('stats'), []);
+        } else {
+            rows = data;
+            writeStore(userKey('stats'), rows);
         }
+        const ids = new Set(rows.map(r => r.id));
+        rows = rows.concat(pendingEntries().filter(p => !ids.has(p.id)));
 
-        const days = [];
-        for (let i = 0; i < 7; i++) days.push({ day: addDays(start, i), kcal: 0 });
-        (data || []).forEach(row => {
-            const d = days.find(x => x.day === row.day);
-            if (d) d.kcal += Number(row.kcal || 0);
+        const byDay = new Map();
+        rows.forEach(r => {
+            const d = byDay.get(r.day) || { kcal: 0, protein: 0 };
+            d.kcal += Number(r.kcal || 0);
+            d.protein += Number(r.protein_g || 0);
+            byDay.set(r.day, d);
         });
+        renderStats(byDay);
+    }
+
+    // Liegt ein Tag im Kalorienziel? Abnehmen: höchstens +5 %, Zunehmen: mindestens −5 %, Halten: ±10 %
+    function inKcalTarget(kcal) {
+        const goal = profile?.kcal_goal || 0;
+        if (!goal) return false;
+        if (profile.goal === 'abnehmen') return kcal <= goal * 1.05;
+        if (profile.goal === 'zunehmen') return kcal >= goal * 0.95;
+        return Math.abs(kcal - goal) <= goal * 0.1;
+    }
+
+    // Tage in Folge bis heute (heute zählt erst, wenn erfüllt)
+    function streak(byDay, test) {
+        let day = todayStr();
+        if (!test(byDay.get(day))) day = addDays(day, -1);
+        let n = 0;
+        while (n < STREAK_DAYS && test(byDay.get(day))) {
+            n++;
+            day = addDays(day, -1);
+        }
+        return n;
+    }
+
+    function renderStats(byDay) {
+        const days = [];
+        for (let i = statsRange - 1; i >= 0; i--) {
+            const day = addDays(currentDay, -i);
+            const d = byDay.get(day) || { kcal: 0, protein: 0 };
+            days.push({ day, kcal: d.kcal, protein: d.protein });
+        }
         renderWeek(days);
+
+        const pGoal = profile?.protein_goal || 0;
+        const logged = days.filter(d => d.kcal > 0);
+        const n = logged.length;
+        const avg = f => n ? logged.reduce((s, d) => s + d[f], 0) / n : 0;
+        const kcalHit = logged.filter(d => inKcalTarget(d.kcal)).length;
+        const proteinHit = pGoal ? logged.filter(d => d.protein >= pGoal).length : 0;
+        const logStreak = streak(byDay, d => d && d.kcal > 0);
+        const proteinStreak = pGoal ? streak(byDay, d => d && d.protein >= pGoal) : 0;
+        const tage = k => k === 1 ? 'Tag' : 'Tage';
+
+        const tiles = n ? [
+            [fmt(avg('kcal')), `Ø kcal pro Tag (${n} ${tage(n)})`],
+            [`${fmt(avg('protein'))} g`, 'Ø Eiweiß pro Tag'],
+            [`${kcalHit} / ${n}`, 'Tage im Kalorienziel'],
+            [`${proteinHit} / ${n}`, 'Tage Eiweißziel erreicht'],
+            [`🔥 ${logStreak}`, `${tage(logStreak)} in Folge eingetragen`],
+            [`💪 ${proteinStreak}`, `${tage(proteinStreak)} in Folge Eiweißziel`]
+        ] : [
+            [`🔥 ${logStreak}`, `${tage(logStreak)} in Folge eingetragen`],
+            [`💪 ${proteinStreak}`, `${tage(proteinStreak)} in Folge Eiweißziel`]
+        ];
+        $('stat-grid').innerHTML = tiles.map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join('');
     }
 
     function renderWeek(days) {
         const goal = profile?.kcal_goal || 0;
+        const many = days.length > 7;
         const W = 320, H = 150, top = 16, bottom = 22;
         const plotH = H - top - bottom;
         const max = Math.max(goal * 1.15, ...days.map(d => d.kcal), 1);
         const slot = W / days.length;
-        const barW = slot * 0.55;
+        const barW = slot * (many ? 0.7 : 0.55);
         const y = v => top + plotH - (v / max) * plotH;
 
         let svg = '';
@@ -1175,24 +1689,330 @@
             const cls = ['chart-bar'];
             if (goal && d.kcal > goal) cls.push('over');
             if (d.day !== currentDay) cls.push('dim');
-            const wd = parseDay(d.day).toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '');
-            svg += `<rect class="${cls.join(' ')}" data-day="${d.day}" x="${x}" y="${top + plotH - h}" width="${barW}" height="${h}" rx="3"><title>${dayLabel(d.day)}: ${fmt(d.kcal)} kcal</title></rect>`;
-            if (d.kcal > 0) svg += `<text class="chart-val" x="${x + barW / 2}" y="${top + plotH - h - 4}" text-anchor="middle">${fmt(d.kcal)}</text>`;
-            svg += `<text class="chart-label${d.day === currentDay ? ' sel' : ''}" x="${x + barW / 2}" y="${H - 6}" text-anchor="middle">${wd}</text>`;
+            // unsichtbare, volle Spalte als Tippfläche (dünne Balken sind sonst schwer zu treffen)
+            svg += `<rect data-day="${d.day}" x="${i * slot}" y="0" width="${slot}" height="${H}" fill="transparent" style="cursor: pointer;"></rect>`;
+            svg += `<rect class="${cls.join(' ')}" data-day="${d.day}" x="${x}" y="${top + plotH - h}" width="${barW}" height="${h}" rx="${many ? 1.5 : 3}"><title>${dayLabel(d.day)}: ${fmt(d.kcal)} kcal · ${fmt(d.protein)} g Eiweiß</title></rect>`;
+            if (!many && d.kcal > 0) svg += `<text class="chart-val" x="${x + barW / 2}" y="${top + plotH - h - 4}" text-anchor="middle">${fmt(d.kcal)}</text>`;
+            const date = parseDay(d.day);
+            let label = '';
+            if (!many) label = date.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '');
+            else if ((days.length - 1 - i) % 5 === 0) label = `${date.getDate()}.${date.getMonth() + 1}.`;
+            // am rechten Rand rechtsbündig, sonst wird das Datum abgeschnitten
+            const anchor = many && i === days.length - 1 ? 'end' : 'middle';
+            const lx = anchor === 'end' ? W : x + barW / 2;
+            if (label) svg += `<text class="chart-label${d.day === currentDay ? ' sel' : ''}" x="${lx}" y="${H - 6}" text-anchor="${anchor}">${label}</text>`;
         });
-        if (goal) svg += `<line class="chart-goal" x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}"></line>`;
+        if (goal) svg += `<line class="chart-goal" x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" style="pointer-events: none;"></line>`;
         $('week-chart').innerHTML = svg;
 
-        const logged = days.filter(d => d.kcal > 0);
-        $('week-avg').innerText = logged.length
-            ? `Ø ${fmt(logged.reduce((s, d) => s + d.kcal, 0) / logged.length)} kcal an ${logged.length} Tag${logged.length > 1 ? 'en' : ''} · Linie = Ziel`
+        $('week-avg').innerText = days.some(d => d.kcal > 0)
+            ? 'Linie = Kalorienziel · Balken antippen öffnet den Tag'
             : 'Noch keine Daten in diesem Zeitraum.';
     }
+
+    $('range-seg').addEventListener('click', (event) => {
+        const btn = event.target.closest('[data-range]');
+        if (!btn) return;
+        statsRange = Number(btn.dataset.range);
+        $('range-seg').querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+        loadStats();
+    });
 
     $('week-chart').addEventListener('click', (event) => {
         const bar = event.target.closest('[data-day]');
         if (bar) changeDay(bar.dataset.day);
     });
+
+    // ---------- Wasser ----------
+
+    let waterTimer = null;
+
+    // 35 ml pro kg, auf 250 ml gerundet, zwischen 1,5 und 4 l
+    function waterGoal() {
+        const kg = Number(profile?.weight_kg) || 0;
+        return kg ? Math.min(4000, Math.max(1500, Math.round(kg * 35 / 250) * 250)) : 2500;
+    }
+
+    function fmtLiter(ml) {
+        return (ml / 1000).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+    }
+
+    function renderWater() {
+        const goal = waterGoal();
+        $('water-text').innerText = `💧 ${fmtLiter(waterMl)} / ${fmtLiter(goal)} l${waterMl >= goal ? ' ✓' : ''}`;
+        $('water-row').classList.toggle('done', waterMl >= goal);
+        $('water-minus').disabled = waterMl <= 0;
+    }
+
+    function changeWater(delta) {
+        const day = currentDay;
+        waterMl = Math.max(0, Math.min(20000, waterMl + delta));
+        renderWater();
+        const pw = readStore(userKey('pendingWater'), {});
+        pw[day] = waterMl;
+        writeStore(userKey('pendingWater'), pw);
+        const cache = readStore(userKey('water'), {});
+        cache[day] = waterMl;
+        writeStore(userKey('water'), cache);
+        // mehrere Tipps kurz hintereinander = eine Speicherung
+        clearTimeout(waterTimer);
+        waterTimer = setTimeout(flushWater, 800);
+    }
+
+    async function flushWater() {
+        if (!currentSession) return;
+        const pw = readStore(userKey('pendingWater'), {});
+        const days = Object.keys(pw);
+        if (!days.length) return;
+        const uid = currentSession.user.id;
+        const { error } = await supabase.from('water').upsert(days.map(day => ({ user_id: uid, day, ml: pw[day] })));
+        if (error) {
+            if (!isNetworkError(error)) console.error('Wasser speichern:', error.message);
+            return;
+        }
+        // nur entfernen, was inzwischen nicht erneut geändert wurde
+        const now = readStore(userKey('pendingWater'), {});
+        days.forEach(day => { if (now[day] === pw[day]) delete now[day]; });
+        writeStore(userKey('pendingWater'), now);
+    }
+
+    $('water-plus').addEventListener('click', () => changeWater(250));
+    $('water-minus').addEventListener('click', () => changeWater(-250));
+
+    // ---------- Gewicht ----------
+
+    function fmtKg(kg) {
+        return Number(kg).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    }
+
+    function fmtDiff(d) {
+        const r = Math.round(d * 10) / 10;
+        return (r > 0 ? '+' : r < 0 ? '−' : '±') + fmtKg(Math.abs(r)) + ' kg';
+    }
+
+    async function loadWeights() {
+        if (!currentSession) return;
+        const { data, error } = await supabase.from('weights').select('day, kg')
+            .eq('user_id', currentSession.user.id).order('day', { ascending: true }).limit(1000);
+        if (error) {
+            weightsList = readStore(userKey('weights'), []);
+        } else {
+            weightsList = (data || []).map(w => ({ day: w.day, kg: Number(w.kg) }));
+            writeStore(userKey('weights'), weightsList);
+        }
+        renderWeight();
+    }
+
+    function renderWeight() {
+        const list = weightsList;
+        const last = list[list.length - 1];
+        $('weight-current').innerText = last ? `${fmtKg(last.kg)} kg` : '';
+        $('weight-input').placeholder = last && last.day === todayStr()
+            ? `Heute: ${fmtKg(last.kg)} kg (ändern)`
+            : 'Gewicht heute (kg)';
+
+        if (list.length < 2) {
+            $('weight-chart').classList.add('hidden');
+            $('weight-info').innerText = list.length
+                ? 'Trag dein Gewicht regelmäßig ein, am besten morgens vor dem Frühstück. Ab dem zweiten Wert siehst du hier deinen Verlauf.'
+                : 'Noch kein Gewicht eingetragen.';
+            return;
+        }
+
+        // höchstens die letzten 90 Tage, aber immer mindestens 2 Punkte
+        const from = addDays(last.day, -90);
+        let pts = list.filter(p => p.day >= from);
+        if (pts.length < 2) pts = list.slice(-2);
+
+        const W = 320, H = 140, left = 42, right = 8, top = 10, bottom = 20;
+        const t0 = parseDay(pts[0].day).getTime();
+        const span = Math.max(parseDay(last.day).getTime() - t0, 1);
+        const kgs = pts.map(p => p.kg);
+        let lo = Math.min(...kgs), hi = Math.max(...kgs);
+        if (hi - lo < 2) {
+            const mid = (hi + lo) / 2;
+            lo = mid - 1;
+            hi = mid + 1;
+        }
+        const x = day => left + (parseDay(day).getTime() - t0) / span * (W - left - right);
+        const y = kg => top + (hi - kg) / (hi - lo) * (H - top - bottom);
+
+        // Trend: Durchschnitt der letzten 7 Tage je Messpunkt
+        const trend = pts.map(p => {
+            const win = list.filter(q => q.day <= p.day && q.day > addDays(p.day, -7));
+            return { day: p.day, kg: win.reduce((s, q) => s + q.kg, 0) / win.length };
+        });
+
+        const line = pts.map(p => `${x(p.day).toFixed(1)},${y(p.kg).toFixed(1)}`).join(' ');
+        const trendLine = trend.map(p => `${x(p.day).toFixed(1)},${y(p.kg).toFixed(1)}`).join(' ');
+        const short = day => { const d = parseDay(day); return `${d.getDate()}.${d.getMonth() + 1}.`; };
+
+        let svg = '';
+        [hi, (hi + lo) / 2, lo].forEach(v => {
+            svg += `<line x1="${left}" x2="${W - right}" y1="${y(v)}" y2="${y(v)}" stroke="var(--border)"></line>`;
+            svg += `<text class="chart-axis" x="${left - 8}" y="${y(v) + 3}" text-anchor="end">${fmtKg(v)}</text>`;
+        });
+        if (pts.length >= 3) svg += `<polyline class="weight-trend" points="${trendLine}"></polyline>`;
+        svg += `<polyline class="weight-line" points="${line}"></polyline>`;
+        pts.forEach(p => {
+            svg += `<circle class="weight-dot" cx="${x(p.day)}" cy="${y(p.kg)}" r="${pts.length > 30 ? 1.8 : 3}"><title>${dayLabel(p.day)}: ${fmtKg(p.kg)} kg</title></circle>`;
+        });
+        svg += `<text class="chart-axis" x="${left}" y="${H - 4}">${short(pts[0].day)}</text>`;
+        svg += `<text class="chart-axis" x="${W - right}" y="${H - 4}" text-anchor="end">${short(last.day)}</text>`;
+        $('weight-chart').innerHTML = svg;
+        $('weight-chart').classList.remove('hidden');
+
+        const first = list[0];
+        const weekAgo = [...list].reverse().find(p => p.day <= addDays(last.day, -7));
+        const parts = [`Seit ${short(first.day)}: ${fmtDiff(last.kg - first.kg)}`];
+        if (weekAgo) parts.push(`seit einer Woche: ${fmtDiff(last.kg - weekAgo.kg)}`);
+        if (pts.length >= 3) parts.push('gestrichelt = 7-Tage-Schnitt');
+        $('weight-info').innerText = parts.join(' · ');
+    }
+
+    $('weight-save-btn').addEventListener('click', async () => {
+        const kg = Math.round(num($('weight-input').value) * 10) / 10;
+        if (kg < 30 || kg > 300) {
+            alert('Bitte ein Gewicht zwischen 30 und 300 kg eingeben.');
+            $('weight-input').focus();
+            return;
+        }
+        const uid = currentSession.user.id;
+        const day = todayStr();
+        $('weight-save-btn').disabled = true;
+        const { error } = await supabase.from('weights').upsert({ user_id: uid, day, kg });
+        if (error) {
+            $('weight-save-btn').disabled = false;
+            alert(isNetworkError(error) ? 'Keine Internetverbindung. Gewicht bitte später eintragen.' : 'Speichern fehlgeschlagen: ' + error.message);
+            return;
+        }
+        weightsList = weightsList.filter(w => w.day !== day).concat({ day, kg }).sort((a, b) => a.day.localeCompare(b.day));
+        writeStore(userKey('weights'), weightsList);
+        $('weight-input').value = '';
+        renderWeight();
+
+        // Ziele an das neue Gewicht anpassen (gleiche Einstellungen wie beim Einrichten)
+        let msg = `${fmtKg(kg)} kg eingetragen`;
+        const p = profile;
+        if (p && p.height_cm && p.age && ACTIVITY[p.activity] && GOALS[p.goal]) {
+            const perKg = p.weight_kg && p.protein_goal ? p.protein_goal / p.weight_kg : GOALS[p.goal].protein;
+            const t = calcTargets({
+                kg, cm: Number(p.height_cm), age: Number(p.age), sex: p.sex,
+                activity: p.activity, goal: p.goal, proteinPerKg: perKg
+            });
+            const { data, error: e2 } = await supabase.from('profiles')
+                .update({ weight_kg: kg, kcal_goal: t.kcal, protein_goal: t.protein })
+                .eq('user_id', uid).select().single();
+            if (!e2 && data) {
+                if (t.kcal !== p.kcal_goal || t.protein !== p.protein_goal) {
+                    msg += ` · neues Ziel: ${fmt(t.kcal)} kcal, ${fmt(t.protein)} g Eiweiß`;
+                }
+                profile = data;
+                writeStore(userKey('profile'), profile);
+                renderSummary();
+                renderWater();
+                loadStats();
+            }
+        }
+        $('weight-save-btn').disabled = false;
+        showToast(msg);
+    });
+
+    $('weight-input').addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') $('weight-save-btn').click();
+    });
+
+    // ---------- Export (CSV für Excel) ----------
+
+    function csvCell(v) {
+        const s = v == null ? '' : String(v);
+        return /[";\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    }
+
+    // Dezimalkomma, damit deutsches Excel Zahlen erkennt
+    function deNum(n, digits = 1) {
+        if (n == null || n === '' || !Number.isFinite(Number(n))) return '';
+        const f = 10 ** digits;
+        return String(Math.round(Number(n) * f) / f).replace('.', ',');
+    }
+
+    function downloadCsv(filename, header, rows) {
+        const text = '﻿' + [header, ...rows].map(r => r.map(csvCell).join(';')).join('\r\n');
+        const url = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8' }));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+    }
+
+    async function fetchAllEntries() {
+        const uid = currentSession.user.id;
+        return fetchAll(() => supabase.from('entries').select('*').eq('user_id', uid)
+            .order('day').order('created_at').order('id'));
+    }
+
+    async function runExport(btn, job) {
+        btn.disabled = true;
+        try {
+            await job();
+        } catch (err) {
+            alert('Export fehlgeschlagen: ' + (isNetworkError(err) ? 'keine Internetverbindung.' : err.message));
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    $('export-entries-btn').addEventListener('click', () => runExport($('export-entries-btn'), async () => {
+        const { data, error } = await fetchAllEntries();
+        if (error) throw new Error(error.message);
+        const time = e => e.created_at
+            ? new Date(e.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
+        downloadCsv(`kcal-eintraege-${todayStr()}.csv`,
+            ['Datum', 'Uhrzeit', 'Mahlzeit', 'Name', 'Menge', 'Gramm', 'kcal', 'Eiweiß g', 'Kohlenhydrate g', 'Fett g', 'Quelle'],
+            data.map(e => [e.day, time(e), MEAL_LABEL[entryMeal(e)], e.name, e.amount || '', deNum(e.grams),
+                Math.round(Number(e.kcal) || 0), deNum(e.protein_g), deNum(e.carbs_g), deNum(e.fat_g),
+                SOURCE_LABEL[e.source] || (e.source === 'manual' ? 'Manuell' : e.source || '')]));
+        showToast(`${data.length} Einträge exportiert`);
+    }));
+
+    $('export-days-btn').addEventListener('click', () => runExport($('export-days-btn'), async () => {
+        const uid = currentSession.user.id;
+        const [entries, weights, water] = await Promise.all([
+            fetchAllEntries(),
+            fetchAll(() => supabase.from('weights').select('day, kg').eq('user_id', uid).order('day')),
+            fetchAll(() => supabase.from('water').select('day, ml').eq('user_id', uid).order('day'))
+        ]);
+        const err = entries.error || weights.error || water.error;
+        if (err) throw new Error(err.message);
+
+        const days = new Map();
+        const get = day => {
+            if (!days.has(day)) days.set(day, { n: 0, kcal: 0, p: 0, c: 0, f: 0, kg: null, ml: null });
+            return days.get(day);
+        };
+        entries.data.forEach(e => {
+            const d = get(e.day);
+            d.n++;
+            d.kcal += Number(e.kcal) || 0;
+            d.p += Number(e.protein_g) || 0;
+            d.c += Number(e.carbs_g) || 0;
+            d.f += Number(e.fat_g) || 0;
+        });
+        weights.data.forEach(w => { get(w.day).kg = Number(w.kg); });
+        water.data.forEach(w => { get(w.day).ml = Number(w.ml); });
+
+        const rows = [...days.keys()].sort().map(day => {
+            const d = days.get(day);
+            return [day, d.n, Math.round(d.kcal), deNum(d.p), deNum(d.c), deNum(d.f),
+                d.kg != null ? deNum(d.kg) : '', d.ml != null ? deNum(d.ml / 1000, 2) : ''];
+        });
+        downloadCsv(`kcal-tagesuebersicht-${todayStr()}.csv`,
+            ['Datum', 'Einträge', 'kcal', 'Eiweiß g', 'Kohlenhydrate g', 'Fett g', 'Gewicht kg', 'Wasser l'], rows);
+        showToast(`${rows.length} Tage exportiert`);
+    }));
 
     // ---------- KI-Eingabe (Chatleiste) ----------
 
@@ -1369,6 +2189,7 @@
         const text = String(info.text || '');
         $('meal-name').value = text.includes(':') ? text.split(':')[0].trim() : text.length <= 40 ? text : '';
 
+        $('preview-meal').value = mealOfTime();
         $('preview-card').classList.remove('hidden');
         $('preview-card').scrollIntoView({ behavior: 'smooth' });
     }
@@ -1419,19 +2240,20 @@
 
     $('preview-save-btn').addEventListener('click', async () => {
         const saveBtn = $('preview-save-btn');
-        const rows = readPreviewRows().map(row => ({ ...row, user_id: currentSession.user.id, day: currentDay }));
+        const meal = $('preview-meal').value;
+        const rows = readPreviewRows().map(row => ({ ...row, meal }));
 
         saveBtn.disabled = true;
-        const { error } = await supabase.from('entries').insert(rows);
+        const result = await insertEntries(rows);
         saveBtn.disabled = false;
 
-        if (error) {
-            console.error('Speichern fehlgeschlagen:', error.message);
-            alert('Mahlzeiten konnten nicht gespeichert werden: ' + error.message);
+        if (!result.ok) {
+            console.error('Speichern fehlgeschlagen:', result.error.message);
+            alert('Mahlzeiten konnten nicht gespeichert werden: ' + result.error.message);
             return;
         }
 
-        rows.forEach(addToHistory);
+        if (result.queued) showToast('Offline gespeichert – wird hochgeladen, sobald du wieder Netz hast.');
         $('food-input').value = '';
         $('image-input').value = '';
         $('photo-btn').classList.remove('has-file');
@@ -1900,6 +2722,25 @@
             chips: options.map(o => ({ label: o.label, factor: o.grams / grams, amount: o.label }))
         }], [], {});
     }
+
+    // ---------- Offline-Modus ----------
+    // Nur über https (GitHub Pages) bzw. localhost; per Doppelklick geöffnet (file://) gibt es keinen Service Worker
+    if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+        navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service Worker:', err));
+    }
+
+    // Beim Zurückkehren in die App: Tag wechseln, falls Mitternacht vorbei ist, und Warteschlange hochladen
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible' || !currentSession || !profile) return;
+        flushPending();
+        flushWater();
+        if ($('app').classList.contains('hidden')) return;
+        const today = todayStr();
+        // nur wenn "Heute" angezeigt wurde und keine Vorschau offen ist
+        if (dayWasToday && currentDay !== today && $('preview-card').classList.contains('hidden')) {
+            changeDay(today);
+        }
+    });
 </script>
 
 </body>
