@@ -55,13 +55,19 @@ Zusammengesetzte Gerichte (z. B. Lasagne, Döner, Pizza) bleiben ein Eintrag, au
 Lies die Eingabe als ganzen Satz: Wörter wie "dazwischen", "darauf", "drauf", "mit", "dazu" beziehen sich auf das vorher Genannte.
 Mengen ohne Zahl passend zum Zusammenhang schätzen, z. B. Aufstrich auf Brot: Butter ca. 5 g pro Scheibe,
 Erdnussbutter/Nuss-Nougat-Creme/Marmelade ca. 10–15 g pro Scheibe; zwischen 2 Scheiben (Sandwich) zählt eine Schicht.
-Selbst zubereitet: Öl, Butter, Marinade, Soße, Panade, Stärke/Mehl, Zucker, Käse usw. IMMER als eigene Einträge aufführen,
-nie stillschweigend in die Hauptzutat einrechnen. Ohne Mengenangabe realistisch schätzen (z. B. Marinade für 400 g Fleisch
-ca. 2 EL = 20 g Öl, 1 EL Speisestärke = 10 g) und in note nennen.
+Selbst zubereitete Gerichte: Öl, Butter, Marinade, Soße, Panade, Stärke/Mehl, Zucker usw., die zur Zubereitung gehören,
+in den Eintrag des Gerichts EINRECHNEN (kcal und Makros vollständig, nichts weglassen) und in note kurz aufschlüsseln,
+z. B. "inkl. ca. 10 g Öl (90 kcal) und 5 g Stärke". Name dann z. B. "Hähnchen mariniert (Airfryer)", generic z. B.
+"Hähnchenbrust mariniert". Nur Lebensmittel, die eigenständig dazu gegessen werden (Reis, Brot, Beilage), als eigene Einträge.
+Ohne Mengenangabe realistisch schätzen (z. B. Marinade für 400 g Fleisch ca. 2 EL = 20 g Öl, 1 EL Speisestärke = 10 g).
 Wurde nur ein Teil gegessen ("die Hälfte", "ein Drittel"), ALLE Zutaten entsprechend anteilig ansetzen.
-Rohgewicht vs. gegart: Packungsangaben und "roh" sind Rohgewicht – dann Werte für rohes Lebensmittel verwenden
-(generic z. B. "Hähnchenbrust roh"). Wurde nach dem Garen gewogen (Airfryer, Pfanne, Grill, Ofen), Werte für das gegarte
-Lebensmittel verwenden (Fleisch verliert beim Garen ca. 25–30 % Wasser, pro Gramm also mehr kcal; generic z. B. "Hähnchenbrust gegart").
+Rohgewicht vs. gegart: Packungsangaben und "roh" sind Rohgewicht – dann Werte für rohes Lebensmittel verwenden.
+Wurde nach dem Garen gewogen (Airfryer, Pfanne, Grill, Ofen), Werte für das gegarte Lebensmittel verwenden.
+Garverlust (Wasser) ca.: Hähnchen-/Putenbrust 25–30 %, Hackfleisch 25 %, Fisch 20 %, Kartoffeln/Gemüse im Airfryer 30–40 %.
+Gegessene Menge aus Rest berechnen: Wird gesagt, wie viel (gegart) übrig ist, dann gegarte Gesamtmenge
+= Rohgewicht × (1 − Garverlust), gegessen = gegarte Gesamtmenge − Rest, Anteil = gegessen / gegarte Gesamtmenge;
+diesen Anteil auf alle Zutaten (auch Öl/Marinade) anwenden. Rechnung kurz in note nennen.
+grams ist bei Gerichten die gegessene Menge im angegebenen Zustand (roh oder gegart), amount nennt den Zustand.
 Felder pro Eintrag:
 - name: kurzer deutscher Name, wie gemeint (mit Marke, falls genannt)
 - generic: allgemeiner deutscher Lebensmittelname ohne Marke im Singular, z. B. "Banane", "Reis gekocht", "Hähnchenbrust", "Milch"
