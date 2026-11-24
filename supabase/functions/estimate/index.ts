@@ -309,7 +309,9 @@ Deno.serve(async (req) => {
         // etwas mitgerechnet, das die Tabelle nicht kennt (Marinade, Zubereitung) -> dann der KI glauben.
         const tableKcal = food ? food.kcal * grams / 100 : 0;
         const aiKcal = Number(a.kcal) || 0;
-        const fits = food && (!aiKcal || Math.abs(aiKcal - tableKcal) <= Math.max(25, tableKcal * 0.2));
+        // Liegt die KI deutlich höher, hat sie wahrscheinlich Öl/Soße o. ä. eingerechnet -> schon ab 10 % / 15 kcal der KI glauben
+        const diff = aiKcal - tableKcal;
+        const fits = food && (!aiKcal || (diff <= Math.max(15, tableKcal * 0.1) && -diff <= Math.max(25, tableKcal * 0.2)));
         if (food && fits) items.push(fromTable(food, grams, withGrams(a.amount, grams), a.note || ""));
         else if (offResults[i]) items.push(offResults[i]!);
         else if (a.needs_search || a.brand) toSearch.push(a);
