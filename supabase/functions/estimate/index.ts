@@ -132,7 +132,7 @@ async function callGemini(model: string, parts: unknown[], search: boolean, time
   return { r, d };
 }
 
-async function gemini(parts: unknown[], search: boolean): Promise<{ items: AiItem[]; sources: Source[] }> {
+async function gemini(parts: unknown[], search: boolean, timeoutMs?: number): Promise<{ items: AiItem[]; sources: Source[] }> {
   if (!Deno.env.get("GEMINI_API_KEY")) throw new Error("GEMINI_API_KEY fehlt in den Supabase-Secrets.");
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
   const fallback = Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-lite-latest";
@@ -145,7 +145,7 @@ async function gemini(parts: unknown[], search: boolean): Promise<{ items: AiIte
   let lastError = "";
   for (let i = 0; i < attempts.length; i++) {
     try {
-      const res = await callGemini(attempts[i], parts, search, search ? 30000 : 20000);
+      const res = await callGemini(attempts[i], parts, search, timeoutMs ?? (search ? 30000 : 20000));
       if (res.r.ok) {
         d = res.d;
         break;
@@ -279,7 +279,8 @@ Deno.serve(async (req) => {
       const parts: unknown[] = [{ text: `${PARSE_PROMPT}\n\nEingabe: ${text || "(siehe Bild)"}` }];
       if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.data } });
       aiCalls++;
-      const parsed = await gemini(parts, false);
+      // Bilder brauchen bei der KI länger als Text
+      const parsed = await gemini(parts, false, image ? 28000 : undefined);
 
       // 3. Markenprodukte bei Open Food Facts – alle gleichzeitig abfragen
       const offResults = await Promise.all(
