@@ -43,7 +43,7 @@ async function loadFoods(apikey: string, authorization: string) {
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-gemini-key",
 };
 const out = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -125,11 +125,11 @@ function friendlyError(status: number, message: string): string {
   return `Gemini: ${message || status}`;
 }
 
-async function callGemini(model: string, parts: unknown[], search: boolean, timeoutMs: number) {
+async function callGemini(model: string, parts: unknown[], search: boolean, timeoutMs: number, key: string) {
   const level = THINKING_LEVELS[thinkingIdx];
   const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": Deno.env.get("GEMINI_API_KEY")! },
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
       contents: [{ parts }],
       ...(search ? { tools: [{ google_search: {} }] } : {}),
@@ -145,16 +145,20 @@ async function callGemini(model: string, parts: unknown[], search: boolean, time
   const d = await r.json().catch(() => ({}));
   if (r.status === 400 && level && /thinking/i.test(d?.error?.message || "")) {
     thinkingIdx++;
-    return callGemini(model, parts, search, timeoutMs);
+    return callGemini(model, parts, search, timeoutMs, key);
   }
   return { r, d };
 }
 
-type GeminiOpts = { search?: boolean; timeoutMs?: number; tries?: number; budgetMs?: number };
+type GeminiOpts = { key: string | null; search?: boolean; timeoutMs?: number; tries?: number; budgetMs?: number };
+
+// Kein KI-Schlüssel für diesen Nutzer (Freunde ohne eigenen Schlüssel)
+class NeedKeyError extends Error {}
 
 // deno-lint-ignore no-explicit-any
-async function gemini(parts: unknown[], opts: GeminiOpts = {}): Promise<{ json: any; sources: Source[] }> {
-  if (!Deno.env.get("GEMINI_API_KEY")) throw new Error("GEMINI_API_KEY fehlt in den Supabase-Secrets.");
+async function gemini(parts: unknown[], opts: GeminiOpts): Promise<{ json: any; sources: Source[] }> {
+  const key = opts.key;
+  if (!key) throw new NeedKeyError("Dafür brauchst du einen eigenen KI-Schlüssel (Einstellungen → KI-Schlüssel).");
   const search = !!opts.search;
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
   const fallback = Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-lite-latest";
@@ -177,13 +181,16 @@ async function gemini(parts: unknown[], opts: GeminiOpts = {}): Promise<{ json: 
       await sleep(pauses[i]);
     }
     try {
-      const res = await callGemini(order[i], parts, search, Math.min(timeoutMs, deadline - Date.now()));
+      const res = await callGemini(order[i], parts, search, Math.min(timeoutMs, deadline - Date.now()), key);
       if (res.r.ok) {
         d = res.d;
         break;
       }
       lastError = friendlyError(res.r.status, res.d?.error?.message || "");
       console.log(`Gemini ${order[i]}: ${res.r.status} ${res.d?.error?.message || ""}`.slice(0, 300));
+      if (/API_KEY_INVALID|API key not valid|PERMISSION_DENIED/i.test(JSON.stringify(res.d?.error || ""))) {
+        throw new Error("Der KI-Schlüssel ist ungültig oder gesperrt. Bitte in den Einstellungen prüfen.");
+      }
       if (!RETRY_STATUS.has(res.r.status)) {
         retryable = false;
         break;
@@ -245,7 +252,7 @@ function cleanPortions(list: unknown): Portion[] {
 
 type ProductReq = { code?: string; name?: string; brand?: string; quantity?: string; serving?: string; categories?: string };
 
-async function product(req: ProductReq) {
+async function product(req: ProductReq, key: string | null) {
   // Produkt bekannt (Open Food Facts) -> nur Portionen aus dem Wissen der KI, ohne Suche (schnell)
   if (req.name) {
     const info = [
@@ -255,14 +262,14 @@ async function product(req: ProductReq) {
       req.serving && `Portionsangabe auf der Packung: ${req.serving}`,
       req.categories && `Kategorie: ${req.categories}`,
     ].filter(Boolean).join("\n");
-    const res = await gemini([{ text: `${PORTIONS_PROMPT}\n\n${info}` }], { timeoutMs: 12000, budgetMs: 25000 });
+    const res = await gemini([{ text: `${PORTIONS_PROMPT}\n\n${info}` }], { key, timeoutMs: 12000, budgetMs: 25000 });
     return { portions: cleanPortions(res.json.portions), sources: [] };
   }
 
   // Unbekannt -> Google-Suche nach der Nummer
   const code = String(req.code || "").replace(/\D/g, "");
   if (code.length < 8) throw new Error("Ungültige Barcode-Nummer.");
-  const res = await gemini([{ text: `${BARCODE_PROMPT}\n\nNummer: ${code}` }], { search: true, tries: 2, budgetMs: 60000 });
+  const res = await gemini([{ text: `${BARCODE_PROMPT}\n\nNummer: ${code}` }], { key, search: true, tries: 2, budgetMs: 60000 });
   const j = res.json;
   if (!j.found || !(Number(j.kcal_100g) >= 0) || !j.name) return { product: null, sources: res.sources.slice(0, 4) };
   return {
@@ -370,10 +377,27 @@ Deno.serve(async (req) => {
       headers: { apikey, Authorization: req.headers.get("Authorization") || "" },
     });
     if (!auth.ok) return out({ error: "Nicht angemeldet." }, 401);
+    const user = await auth.json();
+    // KI-Schlüssel: eigener des Nutzers (kommt bei jeder Anfrage vom Handy, wird hier nie gespeichert
+    // oder geloggt) – sonst der Server-Schlüssel, aber nur für die Besitzer der App
+    const owners = (Deno.env.get("OWNER_USER_IDS") || "").split(",").map((s) => s.trim()).filter(Boolean);
+    const ownKey = (req.headers.get("x-gemini-key") || "").trim();
+    const key = ownKey || (owners.includes(user.id) ? Deno.env.get("GEMINI_API_KEY") || null : null);
     await loadFoods(apikey, req.headers.get("Authorization") || "");
 
     const body = await req.json();
-    if (body.product) return out({ ...(await product(body.product)), ms: Date.now() - started });
+    // Welche KI steht zur Verfügung? (für die Anzeige in der App)
+    if (body.status) return out({ ai: ownKey ? "own" : key ? "server" : "none" });
+    // Eigenen Schlüssel prüfen: Modellliste abrufen kostet nichts
+    if (body.check_key) {
+      if (!ownKey) return out({ ok: false, error: "Kein Schlüssel angegeben." });
+      const r = await fetch("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1", {
+        headers: { "x-goog-api-key": ownKey }, signal: AbortSignal.timeout(10000),
+      });
+      // 429 = Limit gerade erreicht, der Schlüssel selbst ist aber gültig
+      return out(r.ok || r.status === 429 ? { ok: true } : { ok: false, error: "Schlüssel ungültig." });
+    }
+    if (body.product) return out({ ...(await product(body.product, key)), ms: Date.now() - started });
     const { text, image } = body;
     if (!text && !image) return out({ error: "Leere Eingabe." });
 
@@ -392,7 +416,7 @@ Deno.serve(async (req) => {
       if (image) parts.push({ inline_data: { mime_type: image.mime, data: image.data } });
       aiCalls++;
       // Bilder brauchen bei der KI länger als Text
-      const res = await gemini(parts, { timeoutMs: image ? 28000 : 20000 });
+      const res = await gemini(parts, { key, timeoutMs: image ? 28000 : 20000 });
       const parsed = { items: (res.json.items || []) as AiItem[] };
 
       // 3. Markenprodukte bei Open Food Facts – alle gleichzeitig abfragen
@@ -423,7 +447,7 @@ Deno.serve(async (req) => {
         try {
           aiCalls++;
           // nur ein Versuch: ohne Suche gibt es die Schätzung aus Schritt 2 als Ersatz
-          const res = await gemini([{ text: `${SEARCH_PROMPT}\n\n${JSON.stringify(list)}` }], { search: true, tries: 1 });
+          const res = await gemini([{ text: `${SEARCH_PROMPT}\n\n${JSON.stringify(list)}` }], { key, search: true, tries: 1 });
           const found = { items: (res.json.items || []) as AiItem[], sources: res.sources };
           toSearch.forEach((a, i) => {
             const f = found.items[i];
@@ -439,6 +463,6 @@ Deno.serve(async (req) => {
 
     return out({ items, sources, ai_calls: aiCalls, ms: Date.now() - started });
   } catch (e) {
-    return out({ error: e instanceof Error ? e.message : String(e), retry: e instanceof RetryError });
+    return out({ error: e instanceof Error ? e.message : String(e), retry: e instanceof RetryError, need_key: e instanceof NeedKeyError });
   }
 });
