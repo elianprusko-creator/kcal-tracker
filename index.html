@@ -323,6 +323,31 @@
         .ai-privacy { border-top: 1px solid var(--border); padding-top: 10px; font-size: 14px; }
         .link-btn { background: none; border: none; color: var(--danger); font-size: 13px; padding: 6px 0; cursor: pointer; }
         .tip-card { border: 1px solid var(--accent); }
+        .link-btn.accent { color: var(--accent); text-align: left; }
+        /* Küche */
+        .kitchen-tabs { display: flex; margin-bottom: 10px; }
+        .kitchen-tabs button { flex: 1; }
+        .k-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
+        .k-item:last-child { border-bottom: none; }
+        .k-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+        .k-name { font-weight: 600; overflow-wrap: anywhere; }
+        .k-meta { font-size: 12px; color: var(--mute); margin-top: 2px; }
+        .k-meta.warn { color: var(--warn); font-weight: 600; }
+        .k-meta.bad { color: var(--danger); font-weight: 600; }
+        .k-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+        .k-actions .chip.del { color: var(--danger); }
+        .k-cook { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 8px; font-size: 13px; }
+        .k-cook input { width: 64px; margin: 0; padding: 6px; }
+        .k-empty { font-size: 14px; color: var(--mute); padding: 6px 0; }
+        .recipe-editor { border-top: 1px solid var(--border); margin-top: 14px; padding-top: 12px; }
+        .recipe-editor textarea { width: 100%; box-sizing: border-box; border-radius: 8px; border: 1px solid var(--border);
+            background: var(--field); color: var(--text); font: inherit; font-size: 15px; padding: 10px; resize: vertical; }
+        .r-row { display: grid; grid-template-columns: minmax(0, 1fr) 62px 62px 56px 26px; gap: 4px; align-items: center; margin-top: 6px; }
+        .r-row input { margin: 0; padding: 6px; font-size: 14px; min-width: 0; }
+        .r-row button { background: none; border: none; color: var(--danger); font-size: 16px; cursor: pointer; padding: 0; }
+        .r-head { font-size: 11px; color: var(--mute); margin-top: 10px; }
+        .recipe-total { font-size: 13px; margin-top: 10px; background: var(--field); border-radius: 8px; padding: 8px 10px; }
+        .recipe-total:empty { display: none; }
         .remind-row { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 6px 0; cursor: pointer; }
         .remind-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; }
         .remind-row input[type="time"] { width: auto; margin: 0 0 0 auto; padding: 6px; }
@@ -460,6 +485,12 @@
         </div>
 
         <!-- Schnell eintragen -->
+        <!-- Küche: Reste im Kühlschrank (nur wenn eingeschaltet) -->
+        <div class="card hidden" id="fridge-card" style="padding: 12px 14px;">
+            <div class="card-head"><h3 style="margin: 0;">🍲 Im Kühlschrank</h3></div>
+            <div id="fridge-list-home"></div>
+        </div>
+
         <!-- Hinweis im Suchmodus: eigenen KI-Schlüssel empfehlen -->
         <div class="card tip-card hidden" id="ai-tip-card">
             <b>💡 Tipp: Eigenen KI-Schlüssel hinterlegen</b>
@@ -519,6 +550,7 @@
                     <input type="text" id="meal-name" placeholder="z. B. Thai Curry">
                     <button class="btn btn-sec btn-small" id="meal-save-btn" style="flex: 0 0 auto;">Merken</button>
                 </div>
+                <button type="button" class="link-btn accent hidden" id="recipe-from-preview-btn">🍳 Stattdessen als Rezept mit Portionen speichern (Küche)</button>
             </div>
             <div class="row" style="margin-top: 12px;">
                 <button class="btn btn-sec" id="preview-cancel-btn">Verwerfen</button>
@@ -590,6 +622,77 @@
         <details class="card" id="meals-card">
             <summary><h3>Meine Gerichte <span class="sub-text" id="meals-count"></span></h3></summary>
             <div id="meals-list" style="margin-top: 8px;"></div>
+        </details>
+
+        <!-- Küche: Rezepte & Reste (Funktion zum Einschalten) -->
+        <details class="card" id="kitchen-card">
+            <summary><h3>Küche: Rezepte &amp; Reste <span class="sub-text" id="kitchen-state"></span></h3></summary>
+            <div style="margin-top: 10px;">
+                <!-- Ausgeschaltet: kurz erklären -->
+                <div id="kitchen-intro">
+                    <p class="preview-note" style="margin: 0 0 8px;">Für alle, die vorkochen. Eine zusätzliche Funktion – ausgeschaltet merkst du nichts davon.</p>
+                    <ul class="ai-list">
+                        <li><b>Rezepte</b> mit Zutaten anlegen – die App rechnet die Nährwerte pro Portion aus.</li>
+                        <li><b>„Gekocht“</b> antippen: Die Portionen landen als <b>Reste</b> im Kühlschrank.</li>
+                        <li><b>„1 Portion gegessen“</b> trägt sie mit einem Tipp ein und zählt mit, wie viel noch da ist.</li>
+                        <li>Hinweis, wenn Reste bald weg müssen; Essens-Erinnerungen nennen, was im Kühlschrank steht.</li>
+                    </ul>
+                    <p class="preview-note" style="margin: 0 0 12px;">Später geplant: Wochenplan, Einkaufsliste und Vorrat, die sich daraus automatisch füllen.</p>
+                    <button type="button" class="btn" id="kitchen-on-btn">Küche einschalten</button>
+                </div>
+
+                <!-- Eingeschaltet -->
+                <div id="kitchen-main" class="hidden">
+                    <div class="kitchen-tabs seg">
+                        <button type="button" data-tab="fridge" class="active">Kühlschrank</button>
+                        <button type="button" data-tab="recipes">Rezepte</button>
+                        <button type="button" data-tab="settings">Einstellungen</button>
+                    </div>
+
+                    <div data-pane="fridge">
+                        <div id="fridge-list"></div>
+                    </div>
+
+                    <div data-pane="recipes" class="hidden">
+                        <div id="recipe-list"></div>
+                        <button type="button" class="btn btn-sec" id="recipe-new-btn" style="margin-top: 8px;">+ Neues Rezept</button>
+
+                        <div id="recipe-editor" class="recipe-editor hidden">
+                            <div class="row">
+                                <div style="flex: 2;"><label>Name</label><input type="text" id="recipe-name" placeholder="z. B. Chili con Carne" style="margin: 0;"></div>
+                                <div style="flex: 1;"><label>Portionen</label><input type="number" id="recipe-servings" inputmode="numeric" min="1" max="50" value="4" style="margin: 0;"></div>
+                            </div>
+                            <label style="margin-top: 10px;">Zutaten hinzufügen</label>
+                            <textarea id="recipe-input" rows="3" placeholder="z. B. 500 g Rinderhack, 1 Dose Kidneybohnen, 400 g passierte Tomaten, 1 Zwiebel, 2 EL Öl"></textarea>
+                            <div class="row" style="margin-top: 6px;">
+                                <button type="button" class="btn btn-small" id="recipe-calc-btn">Berechnen &amp; hinzufügen</button>
+                                <button type="button" class="btn btn-small btn-sec" id="recipe-add-row-btn">Selbst eintragen</button>
+                            </div>
+                            <p class="preview-note" id="recipe-hint" style="margin: 6px 0 0;"></p>
+                            <div id="recipe-rows"></div>
+                            <div class="recipe-total" id="recipe-total"></div>
+                            <div class="row" style="margin-top: 10px;">
+                                <button type="button" class="btn btn-sec" id="recipe-cancel-btn">Abbrechen</button>
+                                <button type="button" class="btn" id="recipe-save-btn">Rezept speichern</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div data-pane="settings" class="hidden">
+                        <label class="remind-row">Reste halten sich normalerweise
+                            <select id="kitchen-keep" style="width: auto; margin: 0 0 0 auto; padding: 6px;">
+                                <option value="2">2 Tage</option><option value="3">3 Tage</option><option value="4">4 Tage</option>
+                                <option value="5">5 Tage</option><option value="7">7 Tage</option>
+                            </select>
+                        </label>
+                        <label class="remind-row"><input type="checkbox" id="kitchen-home"> Reste auf der Startseite zeigen</label>
+                        <label class="remind-row"><input type="checkbox" id="kitchen-suggest"> Reste beim Tippen vorschlagen</label>
+                        <label class="remind-row"><input type="checkbox" id="kitchen-remind"> Essens-Erinnerungen nennen die Reste</label>
+                        <p class="preview-note" style="margin: 8px 0 12px;">Rezepte und Reste bleiben gespeichert, wenn du die Küche ausschaltest.</p>
+                        <button type="button" class="btn btn-sec" id="kitchen-off-btn">Küche ausschalten</button>
+                    </div>
+                </div>
+            </div>
         </details>
 
         <!-- KI-Schlüssel -->
@@ -1131,6 +1234,7 @@
         flushWater();
         syncPush();
         refreshAiMode();
+        loadKitchen();
         if (!profile || !profile.kcal_goal) {
             showOnboarding();
         } else {
@@ -2482,7 +2586,7 @@
             `${info.ms ? ', ' + (info.ms / 1000).toFixed(1).replace('.', ',') + ' s' : ''})`;
         $('preview-list').innerHTML = items.map(item => `
             <div class="preview-item" data-scale data-amount="${esc(item.amount)}" data-source="${esc(item.source || 'ki')}"
-                 data-grams="${esc(item.grams || '')}" data-barcode="${esc(item.barcode || '')}"
+                 data-grams="${esc(item.grams || '')}" data-barcode="${esc(item.barcode || '')}" data-leftover="${esc(item.leftover || '')}"
                  data-init="${esc(JSON.stringify([Number(item.grams) || 0, ...NUTRIENTS.map(f => Number(item[f]) || 0)]))}">
                 ${item.chips && item.chips.length ? `
                     <div class="chips">
@@ -2579,6 +2683,7 @@
         const meal = $('preview-meal').value;
         const rows = readPreviewRows().map(row => ({ ...row, meal }));
         rememberProductCorrections();
+        const leftoverUse = collectLeftoverUse();
 
         saveBtn.disabled = true;
         const result = await insertEntries(rows);
@@ -2590,6 +2695,7 @@
             return;
         }
 
+        if (leftoverUse.length) applyLeftoverUse(leftoverUse);
         if (result.queued) showToast('Offline gespeichert – wird hochgeladen, sobald du wieder Netz hast.');
         $('food-input').value = '';
         fitFoodInput();
@@ -2737,6 +2843,18 @@
 
         const out = [];
         const seen = new Set();
+        if (kitchen.on && kitchen.inSuggest) {
+            for (const l of leftoversList) {
+                if (!matches(l.name)) continue;
+                out.push({ type: 'leftover', l, score: 500 + bonus(l.name) });
+            }
+            for (const r of recipesList) {
+                const key = r.name.trim().toLowerCase();
+                if (seen.has(key) || !matches(r.name)) continue;
+                seen.add(key);
+                out.push({ type: 'recipe', r, score: 280 + bonus(r.name) });
+            }
+        }
         for (const meal of mealsList) {
             const key = meal.name.trim().toLowerCase();
             if (seen.has(key) || !matches(meal.name)) continue;
@@ -2789,6 +2907,14 @@
                 name = s.p.name + (s.p.brand && !s.p.name.toLowerCase().includes(s.p.brand.toLowerCase()) ? ` (${s.p.brand})` : '');
                 meta = [s.p.per100 ? 'Open Food Facts · pro 100 g' : 'Open Food Facts', s.p.quantity].filter(Boolean).join(' · ');
                 kcal = s.p.per100 ? `${fmt(s.p.per100.kcal)} kcal` : '›';
+            } else if (s.type === 'leftover') {
+                name = '🍲 ' + s.l.name;
+                meta = `Reste · noch ${fmtNum(s.l.portions_left)} Portionen · 1 Portion`;
+                kcal = `${fmt(s.l.kcal)} kcal`;
+            } else if (s.type === 'recipe') {
+                name = s.r.name;
+                meta = `Rezept · 1 von ${fmtNum(s.r.servings)} Portionen`;
+                kcal = `${fmt(recipeTotals(s.r.ingredients || [], s.r.servings).per.kcal)} kcal`;
             } else if (s.type === 'meal') {
                 name = s.meal.name;
                 meta = 'Dein Gericht · 1 Portion';
@@ -2912,6 +3038,11 @@
             if (!s.p.per100) return lookupBarcode(s.code, s.p.name);
             writeStore(productKey(s.code), s.p);
             return showPreview([productItem(s.code, s.p)], [], {});
+        }
+        if (s.type === 'leftover' || s.type === 'recipe') {
+            hideSuggestions();
+            hideStatus();
+            return showPreview([s.type === 'leftover' ? leftoverItem(s.l) : recipeItem(s.r)], [], {});
         }
         const qty = leadingQuantity($('food-input').value);
         hideSuggestions();
@@ -3285,6 +3416,493 @@
             writeStore(productKey(code), p);
         });
     }
+
+    // ---------- Küche: Rezepte & Reste ----------
+    // Zusätzliche Funktion, die man erst einschaltet (user_prefs.prefs.kitchen.on).
+    // Rezept = Zutaten mit Nährwerten + Anzahl Portionen. "Gekocht" legt Reste (Portionen) an,
+    // "gegessen" trägt Portionen ein und zieht sie von den Resten ab.
+
+    const KITCHEN_DEFAULTS = { on: false, keepDays: 3, onHome: true, inSuggest: true, inReminders: true };
+    let userPrefs = {};
+    let kitchen = { ...KITCHEN_DEFAULTS };
+    let recipesList = [];
+    let leftoversList = [];
+    let editingRecipe = null;   // null = neues Rezept, sonst id
+    let recipeRows = [];        // [{ name, grams, kcal, protein_g, carbs_g, fat_g }]
+    let cookingId = null;       // Rezept, bei dem gerade "Gekocht" offen ist
+
+    const r1 = v => Math.round((Number(v) || 0) * 10) / 10;
+    // 'heute' / 'gestern' / 'Mo., 24.11.'
+    const cookedLabel = d => { const l = dayLabel(d); return l === 'Heute' || l === 'Gestern' ? l.toLowerCase() : l; };
+
+    async function loadKitchen() {
+        const cached = readStore(userKey('prefs'), null);
+        if (cached) applyPrefs(cached);
+        const { data, error } = await supabase.from('user_prefs').select('prefs').eq('user_id', currentSession.user.id).maybeSingle();
+        if (!error) {
+            applyPrefs(data?.prefs || {});
+            writeStore(userKey('prefs'), userPrefs);
+        }
+        if (kitchen.on) await loadKitchenData();
+    }
+
+    function applyPrefs(prefs) {
+        userPrefs = prefs || {};
+        kitchen = { ...KITCHEN_DEFAULTS, ...(userPrefs.kitchen || {}) };
+        renderKitchen();
+    }
+
+    async function saveKitchenPrefs() {
+        userPrefs = { ...userPrefs, kitchen };
+        writeStore(userKey('prefs'), userPrefs);
+        const { error } = await supabase.from('user_prefs').upsert({
+            user_id: currentSession.user.id, prefs: userPrefs, updated_at: new Date().toISOString()
+        });
+        if (error && !isNetworkError(error)) alert('Einstellung nicht gespeichert: ' + error.message);
+    }
+
+    async function loadKitchenData() {
+        const [rec, left] = await Promise.all([
+            supabase.from('recipes').select('*').eq('user_id', currentSession.user.id).order('name'),
+            supabase.from('leftovers').select('*').eq('user_id', currentSession.user.id).is('done_at', null).order('cooked_on')
+        ]);
+        if (!rec.error) recipesList = rec.data;
+        if (!left.error) leftoversList = left.data;
+        renderKitchen();
+    }
+
+    // ----- Anzeige -----
+
+    function renderKitchen() {
+        $('kitchen-state').innerText = kitchen.on ? '· an' : '';
+        $('kitchen-intro').classList.toggle('hidden', kitchen.on);
+        $('kitchen-main').classList.toggle('hidden', !kitchen.on);
+        $('kitchen-keep').value = String(kitchen.keepDays);
+        $('kitchen-home').checked = kitchen.onHome;
+        $('kitchen-suggest').checked = kitchen.inSuggest;
+        $('kitchen-remind').checked = kitchen.inReminders;
+        $('recipe-from-preview-btn').classList.toggle('hidden', !kitchen.on);
+        renderFridge();
+        renderRecipes();
+    }
+
+    // Wie lange noch gut? cooked_on + keep_days im Vergleich zu heute
+    function leftoverFreshness(l) {
+        const end = addDays(l.cooked_on, Number(l.keep_days) || 3);
+        const daysLeft = Math.round((parseDay(end) - parseDay(todayStr())) / 86400000);
+        if (daysLeft < 0) return { text: 'Haltbarkeit überschritten – lieber prüfen', cls: 'bad' };
+        if (daysLeft === 0) return { text: 'heute aufbrauchen', cls: 'warn' };
+        if (daysLeft === 1) return { text: 'bis morgen gut', cls: 'warn' };
+        return { text: `noch ${daysLeft} Tage gut`, cls: '' };
+    }
+
+    function fridgeHtml() {
+        if (!leftoversList.length) {
+            return '<div class="k-empty">Gerade nichts. Tippe bei einem Rezept auf „Gekocht“, dann landen die Portionen hier.</div>';
+        }
+        return leftoversList.map(l => {
+            const fresh = leftoverFreshness(l);
+            const left = Number(l.portions_left);
+            return `
+                <div class="k-item">
+                    <div class="k-head">
+                        <span class="k-name">${esc(l.name)}</span>
+                        <span class="sub-text">${fmtNum(left)} von ${fmtNum(l.portions_total)} Port.</span>
+                    </div>
+                    <div class="k-meta">${fmt(l.kcal)} kcal · ${fmtNum(l.protein_g)} g Eiweiß pro Portion${l.portion_g ? ` (≈ ${Math.round(l.portion_g)} g)` : ''}</div>
+                    <div class="k-meta ${fresh.cls}">Gekocht ${esc(cookedLabel(l.cooked_on))} · ${fresh.text}</div>
+                    <div class="k-actions">
+                        <button type="button" class="chip" data-eat="${l.id}">🍽️ ${left < 1 ? 'Rest' : '1 Portion'} gegessen</button>
+                        <button type="button" class="chip del" data-discard="${l.id}">Weg damit</button>
+                    </div>
+                </div>`;
+        }).join('');
+    }
+
+    function renderFridge() {
+        const html = fridgeHtml();
+        $('fridge-list').innerHTML = html;
+        $('fridge-list-home').innerHTML = html;
+        $('fridge-card').classList.toggle('hidden', !(kitchen.on && kitchen.onHome && leftoversList.length));
+    }
+
+    function recipeTotals(rows, servings) {
+        const sum = f => rows.reduce((s, r) => s + (Number(r[f]) || 0), 0);
+        const total = { grams: sum('grams'), kcal: sum('kcal'), protein_g: sum('protein_g'), carbs_g: sum('carbs_g'), fat_g: sum('fat_g') };
+        const n = Number(servings) || 1;
+        const per = Object.fromEntries(Object.entries(total).map(([k, v]) => [k, v / n]));
+        // Gramm pro Portion nur, wenn alle Zutaten eine Menge haben (sonst irreführend)
+        if (rows.some(r => !Number(r.grams))) per.grams = null;
+        return { total, per };
+    }
+
+    function renderRecipes() {
+        if (!recipesList.length) {
+            $('recipe-list').innerHTML = '<div class="k-empty">Noch keine Rezepte. Leg eins an – oder schreib dein Gericht wie gewohnt unten ins Feld und tippe in der Vorschau auf „als Rezept speichern“.</div>';
+            return;
+        }
+        $('recipe-list').innerHTML = recipesList.map(r => {
+            const { per } = recipeTotals(r.ingredients || [], r.servings);
+            const cooking = cookingId === r.id;
+            return `
+                <div class="k-item">
+                    <div class="k-head">
+                        <span class="k-name">${esc(r.name)}</span>
+                        <span class="sub-text">${fmtNum(r.servings)} Port.</span>
+                    </div>
+                    <div class="k-meta">Pro Portion: ${fmt(per.kcal)} kcal · ${fmtNum(per.protein_g)} g Eiweiß · ${fmtNum(per.carbs_g)} g KH · ${fmtNum(per.fat_g)} g Fett${per.grams ? ` · ≈ ${Math.round(per.grams)} g` : ''}</div>
+                    <div class="k-meta">${(r.ingredients || []).map(i => esc(i.name)).join(', ')}</div>
+                    ${cooking ? `
+                        <div class="k-cook">
+                            Portionen <input type="number" id="cook-portions" inputmode="decimal" min="0.5" step="0.5" value="${esc(r.servings)}">
+                            hält <input type="number" id="cook-days" inputmode="numeric" min="1" max="30" value="${esc(kitchen.keepDays)}"> Tage
+                            <button type="button" class="btn btn-small" data-cook-save="${r.id}" style="width: auto;">In den Kühlschrank</button>
+                        </div>` : `
+                        <div class="k-actions">
+                            <button type="button" class="chip" data-cook="${r.id}">🍳 Gekocht</button>
+                            <button type="button" class="chip" data-recipe-eat="${r.id}">1 Portion essen</button>
+                            <button type="button" class="chip" data-recipe-edit="${r.id}">Bearbeiten</button>
+                            <button type="button" class="chip del" data-recipe-del="${r.id}">Löschen</button>
+                        </div>`}
+                </div>`;
+        }).join('');
+    }
+
+    // ----- Ein-/Ausschalten, Einstellungen, Tabs -----
+
+    $('kitchen-on-btn').addEventListener('click', async () => {
+        kitchen.on = true;
+        renderKitchen();
+        await saveKitchenPrefs();
+        await loadKitchenData();
+        showToast('Küche ist an');
+    });
+
+    $('kitchen-off-btn').addEventListener('click', async () => {
+        if (!confirm('Küche ausschalten? Rezepte und Reste bleiben gespeichert.')) return;
+        kitchen.on = false;
+        renderKitchen();
+        await saveKitchenPrefs();
+    });
+
+    [['kitchen-keep', 'keepDays', el => Number(el.value)], ['kitchen-home', 'onHome', el => el.checked],
+     ['kitchen-suggest', 'inSuggest', el => el.checked], ['kitchen-remind', 'inReminders', el => el.checked]]
+        .forEach(([id, key, read]) => $(id).addEventListener('change', () => {
+            kitchen[key] = read($(id));
+            renderFridge();
+            saveKitchenPrefs();
+        }));
+
+    document.querySelectorAll('.kitchen-tabs button').forEach(btn => btn.addEventListener('click', () => {
+        document.querySelectorAll('.kitchen-tabs button').forEach(b => b.classList.toggle('active', b === btn));
+        document.querySelectorAll('#kitchen-main [data-pane]').forEach(p => p.classList.toggle('hidden', p.dataset.pane !== btn.dataset.tab));
+    }));
+
+    function openKitchenTab(tab) {
+        $('kitchen-card').open = true;
+        document.querySelector(`.kitchen-tabs button[data-tab="${tab}"]`).click();
+    }
+
+    // ----- Reste essen / wegwerfen -----
+
+    function leftoverItem(l) {
+        const grams = Number(l.portion_g) || null;
+        const portions = Math.min(1, Number(l.portions_left)) || 1;
+        return {
+            name: l.name,
+            amount: (portions === 1 ? '1 Portion' : `${fmtNum(portions)} Portion`) + (grams ? ` (≈ ${Math.round(grams * portions)} g)` : ''),
+            grams: grams ? r1(grams * portions) : null,
+            kcal: Math.round(l.kcal * portions),
+            protein_g: r1(l.protein_g * portions),
+            carbs_g: r1(l.carbs_g * portions),
+            fat_g: r1(l.fat_g * portions),
+            source: 'meal',
+            leftover: l.id,
+            note: `Reste von ${cookedLabel(l.cooked_on)} · noch ${fmtNum(l.portions_left)} Portionen`,
+            chips: portionChips(grams ? grams * portions : null, 'portion').map(c => ({ ...c, factor: c.factor / portions }))
+        };
+    }
+
+    function recipeItem(r) {
+        const { per } = recipeTotals(r.ingredients || [], r.servings);
+        return {
+            name: r.name,
+            amount: '1 Portion' + (per.grams ? ` (≈ ${Math.round(per.grams)} g)` : ''),
+            grams: per.grams ? r1(per.grams) : null,
+            kcal: Math.round(per.kcal),
+            protein_g: r1(per.protein_g),
+            carbs_g: r1(per.carbs_g),
+            fat_g: r1(per.fat_g),
+            source: 'meal',
+            note: `Rezept · ${fmtNum(r.servings)} Portionen`,
+            chips: portionChips(per.grams, 'portion')
+        };
+    }
+
+    async function updateLeftover(id, change) {
+        const { error } = await supabase.from('leftovers').update(change).eq('id', id);
+        if (error) {
+            alert('Reste konnten nicht aktualisiert werden: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+            return false;
+        }
+        leftoversList = leftoversList
+            .map(l => l.id === id ? { ...l, ...change } : l)
+            .filter(l => !l.done_at);
+        renderFridge();
+        return true;
+    }
+
+    // Beim Speichern der Vorschau: gegessene Portionen von den Resten abziehen
+    // (aus den kcal berechnet, damit auch ½ Portion oder von Hand geänderte Mengen stimmen)
+    function collectLeftoverUse() {
+        return [...$('preview-list').querySelectorAll('.preview-item[data-leftover]')]
+            .filter(el => el.dataset.leftover)
+            .map(el => {
+                const l = leftoversList.find(x => x.id === el.dataset.leftover);
+                if (!l) return null;
+                const kcal = num(el.querySelector('[data-field="kcal"]').value);
+                const grams = num(el.querySelector('[data-field="grams"]').value);
+                const portions = Number(l.kcal) > 0 ? kcal / Number(l.kcal) : (l.portion_g && grams ? grams / l.portion_g : 1);
+                return { l, portions };
+            })
+            .filter(Boolean);
+    }
+
+    async function applyLeftoverUse(list) {
+        for (const { l, portions } of list) {
+            const left = Math.max(0, Math.round((Number(l.portions_left) - portions) * 100) / 100);
+            await updateLeftover(l.id, left < 0.15 ? { portions_left: 0, done_at: new Date().toISOString() } : { portions_left: left });
+        }
+    }
+
+    function onKitchenClick(event) {
+        const t = event.target.closest('button');
+        if (!t) return;
+        const d = t.dataset;
+        if (d.eat) {
+            const l = leftoversList.find(x => x.id === d.eat);
+            if (l) {
+                hideStatus();
+                showPreview([leftoverItem(l)], [], {});
+            }
+        } else if (d.discard) {
+            const l = leftoversList.find(x => x.id === d.discard);
+            if (l && confirm(`„${l.name}“ aus dem Kühlschrank nehmen (weggeworfen/verschenkt)?`)) {
+                updateLeftover(l.id, { done_at: new Date().toISOString() });
+            }
+        } else if (d.cook) {
+            cookingId = d.cook;
+            renderRecipes();
+        } else if (d.cookSave) {
+            cookRecipe(d.cookSave, num($('cook-portions').value), num($('cook-days').value));
+        } else if (d.recipeEat) {
+            const r = recipesList.find(x => x.id === d.recipeEat);
+            if (r) showPreview([recipeItem(r)], [], {});
+        } else if (d.recipeEdit) {
+            openRecipeEditor(recipesList.find(x => x.id === d.recipeEdit));
+        } else if (d.recipeDel) {
+            deleteRecipe(d.recipeDel);
+        }
+    }
+    $('kitchen-main').addEventListener('click', onKitchenClick);
+    $('fridge-card').addEventListener('click', onKitchenClick);
+
+    async function cookRecipe(id, portions, days) {
+        const r = recipesList.find(x => x.id === id);
+        if (!r || !portions) return;
+        const { total } = recipeTotals(r.ingredients || [], r.servings);
+        const allGrams = (r.ingredients || []).every(i => Number(i.grams));
+        const row = {
+            user_id: currentSession.user.id,
+            recipe_id: r.id,
+            name: r.name,
+            portions_total: portions,
+            portions_left: portions,
+            // Nährwerte pro Portion: ganzes Rezept geteilt durch die tatsächlich gekochten Portionen
+            portion_g: allGrams ? r1(total.grams / portions) : null,
+            kcal: Math.round(total.kcal / portions),
+            protein_g: r1(total.protein_g / portions),
+            carbs_g: r1(total.carbs_g / portions),
+            fat_g: r1(total.fat_g / portions),
+            cooked_on: todayStr(),
+            keep_days: Math.min(30, Math.max(1, Math.round(days) || kitchen.keepDays))
+        };
+        const { data, error } = await supabase.from('leftovers').insert(row).select().single();
+        if (error) {
+            alert('Konnte nicht gespeichert werden: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+            return;
+        }
+        cookingId = null;
+        leftoversList.push(data);
+        renderKitchen();
+        showToast(`${fmtNum(portions)} Portionen ${r.name} im Kühlschrank`, 'Jetzt 1 essen', () => showPreview([leftoverItem(data)], [], {}));
+    }
+
+    async function deleteRecipe(id) {
+        const r = recipesList.find(x => x.id === id);
+        if (!r || !confirm(`Rezept „${r.name}“ löschen? Reste im Kühlschrank bleiben.`)) return;
+        const { error } = await supabase.from('recipes').delete().eq('id', id);
+        if (error) {
+            alert('Löschen fehlgeschlagen: ' + error.message);
+            return;
+        }
+        recipesList = recipesList.filter(x => x.id !== id);
+        renderRecipes();
+    }
+
+    // ----- Rezept-Editor -----
+
+    function openRecipeEditor(recipe = null, rows = null, name = '') {
+        editingRecipe = recipe ? recipe.id : null;
+        recipeRows = (rows || recipe?.ingredients || []).map(i => ({
+            name: i.name, grams: Number(i.grams) || 0, kcal: Number(i.kcal) || 0,
+            protein_g: Number(i.protein_g) || 0, carbs_g: Number(i.carbs_g) || 0, fat_g: Number(i.fat_g) || 0
+        }));
+        $('recipe-name').value = recipe?.name || name;
+        $('recipe-servings').value = recipe?.servings || 4;
+        $('recipe-input').value = '';
+        $('recipe-hint').innerText = hasAi()
+            ? 'Mengen am besten roh/ungekocht angeben, so wie du einkaufst und abwiegst.'
+            : 'Ohne KI-Schlüssel werden nur Grundzutaten aus der Tabelle erkannt (z. B. „200 g Reis“). Alles andere trägst du selbst ein.';
+        $('recipe-save-btn').innerText = recipe ? 'Änderungen speichern' : 'Rezept speichern';
+        renderRecipeRows();
+        openKitchenTab('recipes');
+        $('recipe-editor').classList.remove('hidden');
+        $('recipe-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function closeRecipeEditor() {
+        $('recipe-editor').classList.add('hidden');
+        recipeRows = [];
+        editingRecipe = null;
+    }
+
+    function renderRecipeRows() {
+        $('recipe-rows').innerHTML = recipeRows.length ? `
+            <div class="r-row r-head"><span>Zutat</span><span>g</span><span>kcal</span><span>Eiweiß</span><span></span></div>
+            ${recipeRows.map((r, i) => `
+                <div class="r-row">
+                    <input type="text" data-i="${i}" data-k="name" value="${esc(r.name)}" placeholder="Zutat">
+                    <input type="number" data-i="${i}" data-k="grams" inputmode="decimal" value="${r.grams || ''}" placeholder="g">
+                    <input type="number" data-i="${i}" data-k="kcal" inputmode="numeric" value="${Math.round(r.kcal) || ''}" placeholder="kcal">
+                    <input type="number" data-i="${i}" data-k="protein_g" inputmode="decimal" value="${r1(r.protein_g) || ''}" placeholder="g">
+                    <button type="button" data-del="${i}" title="Entfernen">✕</button>
+                </div>`).join('')}` : '';
+        renderRecipeTotal();
+    }
+
+    function renderRecipeTotal() {
+        const servings = num($('recipe-servings').value) || 1;
+        if (!recipeRows.length) {
+            $('recipe-total').innerText = '';
+            return;
+        }
+        const { total, per } = recipeTotals(recipeRows, servings);
+        $('recipe-total').innerHTML = `Gesamt: <b>${fmt(total.kcal)} kcal</b> · ${fmtNum(total.protein_g)} g Eiweiß<br>` +
+            `Pro Portion (${fmtNum(servings)}): <b>${fmt(per.kcal)} kcal</b> · ${fmtNum(per.protein_g)} g Eiweiß · ` +
+            `${fmtNum(per.carbs_g)} g KH · ${fmtNum(per.fat_g)} g Fett${per.grams ? ` · ≈ ${Math.round(per.grams)} g` : ''}`;
+    }
+
+    $('recipe-servings').addEventListener('input', renderRecipeTotal);
+
+    // Menge ändern -> Nährwerte der Zeile anteilig mitändern
+    $('recipe-rows').addEventListener('change', (event) => {
+        const el = event.target;
+        const row = recipeRows[Number(el.dataset.i)];
+        if (!row) return;
+        const k = el.dataset.k;
+        if (k === 'name') row.name = el.value.trim();
+        else if (k === 'grams') {
+            const g = num(el.value);
+            if (row.grams && g) {
+                const f = g / row.grams;
+                ['kcal', 'protein_g', 'carbs_g', 'fat_g'].forEach(n => { row[n] *= f; });
+            }
+            row.grams = g;
+            renderRecipeRows();
+            return;
+        } else row[k] = num(el.value);
+        renderRecipeTotal();
+    });
+
+    $('recipe-rows').addEventListener('click', (event) => {
+        const del = event.target.closest('[data-del]');
+        if (!del) return;
+        recipeRows.splice(Number(del.dataset.del), 1);
+        renderRecipeRows();
+    });
+
+    $('recipe-add-row-btn').addEventListener('click', () => {
+        recipeRows.push({ name: '', grams: 0, kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+        renderRecipeRows();
+        const inputs = $('recipe-rows').querySelectorAll('[data-k="name"]');
+        inputs[inputs.length - 1]?.focus();
+    });
+
+    $('recipe-calc-btn').addEventListener('click', async () => {
+        const text = $('recipe-input').value.trim();
+        if (!text) return;
+        const btn = $('recipe-calc-btn');
+        btn.disabled = true;
+        btn.innerText = 'Rechne …';
+        try {
+            const data = await invokeWithRetry({ text }, () => { btn.innerText = 'KI ausgelastet, neuer Versuch …'; });
+            (data.items || []).forEach(i => recipeRows.push({
+                name: i.name, grams: Number(i.grams) || 0, kcal: Number(i.kcal) || 0,
+                protein_g: Number(i.protein_g) || 0, carbs_g: Number(i.carbs_g) || 0, fat_g: Number(i.fat_g) || 0
+            }));
+            $('recipe-input').value = '';
+            renderRecipeRows();
+        } catch (err) {
+            alert(hasAi() ? 'Berechnen fehlgeschlagen: ' + err.message
+                : 'Ohne KI-Schlüssel konnten nicht alle Zutaten erkannt werden. Schreib Grundzutaten mit Menge (z. B. „200 g Reis, 2 Eier“) oder tippe auf „Selbst eintragen“.');
+        } finally {
+            btn.disabled = false;
+            btn.innerText = 'Berechnen & hinzufügen';
+        }
+    });
+
+    $('recipe-new-btn').addEventListener('click', () => openRecipeEditor());
+    $('recipe-cancel-btn').addEventListener('click', closeRecipeEditor);
+
+    $('recipe-save-btn').addEventListener('click', async () => {
+        const name = $('recipe-name').value.trim();
+        const servings = num($('recipe-servings').value);
+        const ingredients = recipeRows.filter(r => r.name || r.kcal).map(r => ({
+            name: r.name || 'Zutat', grams: r1(r.grams), kcal: Math.round(r.kcal),
+            protein_g: r1(r.protein_g), carbs_g: r1(r.carbs_g), fat_g: r1(r.fat_g)
+        }));
+        if (!name) return $('recipe-name').focus();
+        if (!servings) return $('recipe-servings').focus();
+        if (!ingredients.length) return alert('Bitte mindestens eine Zutat hinzufügen.');
+        const btn = $('recipe-save-btn');
+        btn.disabled = true;
+        const row = { user_id: currentSession.user.id, name, servings, ingredients, updated_at: new Date().toISOString() };
+        const q = editingRecipe
+            ? supabase.from('recipes').update(row).eq('id', editingRecipe).select().single()
+            : supabase.from('recipes').insert(row).select().single();
+        const { data, error } = await q;
+        btn.disabled = false;
+        if (error) {
+            alert('Speichern fehlgeschlagen: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+            return;
+        }
+        recipesList = [...recipesList.filter(r => r.id !== data.id), data].sort((a, b) => a.name.localeCompare(b.name));
+        closeRecipeEditor();
+        renderRecipes();
+        showToast(`Rezept „${name}“ gespeichert`, '🍳 Gekocht', () => {
+            cookingId = data.id;
+            renderRecipes();
+        });
+    });
+
+    // Aus der Vorschau (z. B. KI-Analyse eines selbstgekochten Gerichts) ein Rezept machen
+    $('recipe-from-preview-btn').addEventListener('click', () => {
+        const rows = readPreviewRows();
+        const name = $('meal-name').value.trim();
+        hidePreview();
+        openRecipeEditor(null, rows, name);
+    });
 
     // ---------- Erinnerungen (Push) ----------
     // Die Zeiten liegen in Supabase (reminder_settings); die Edge Function "remind" prüft alle 5 Minuten,

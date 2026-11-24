@@ -155,6 +155,20 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
           `Für diese Mahlzeit ca. ${fmt(Math.round(perKcal / 10) * 10)} kcal` +
           (perP >= 5 ? ` mit ${fmt(perP)} g Eiweiß.` : ".");
       }
+      // Küche eingeschaltet: Reste im Kühlschrank nennen (die ältesten zuerst)
+      try {
+        const prefs = await rest(`user_prefs?user_id=eq.${row.user_id}&select=prefs`);
+        const k = prefs[0]?.prefs?.kitchen;
+        if (k?.on && k.inReminders !== false) {
+          const left: { name: string; portions_left: number }[] = await rest(
+            `leftovers?user_id=eq.${row.user_id}&done_at=is.null&portions_left=gt.0&select=name,portions_left&order=cooked_on.asc&limit=3`,
+          );
+          if (left.length) {
+            const n = (v: number) => String(Math.round(v * 10) / 10).replace(".", ",");
+            body += ` 🍲 Im Kühlschrank: ${left.map((l) => `${l.name} (${n(Number(l.portions_left))} Port.)`).join(", ")}.`;
+          }
+        }
+      } catch { /* Reste sind nur ein Zusatz */ }
       msgs.push({ title: `🍽️ Zeit für: ${dueMeal.label}`, body, tag: `meal-${day}-${dueMeal.time}` });
     }
   }
