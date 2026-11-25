@@ -212,6 +212,37 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
   return results;
 }
 
+// Wochenrückblick: sonntags um 18 Uhr (Ortszeit) eine kurze Nachricht ohne Zahlen – die Details stehen in der App
+async function weeklyPush() {
+  const prefs: { user_id: string }[] = await rest("user_prefs?prefs->weekly->>on=eq.true&select=user_id");
+  if (!prefs.length) return 0;
+  const ids = prefs.map((p) => p.user_id).join(",");
+  const tzRows: { user_id: string; tz: string }[] = await rest(`reminder_settings?user_id=in.(${ids})&select=user_id,tz`);
+  let sent = 0;
+  for (const { user_id } of prefs) {
+    const tz = tzRows.find((t) => t.user_id === user_id)?.tz || "Europe/Berlin";
+    const { day, min } = localNow(tz);
+    const weekday = new Date(day + "T12:00:00Z").getUTCDay();
+    if (weekday !== 0 || !isDue(18 * 60, min)) continue;
+    const subs: Sub[] = await rest(`push_subscriptions?user_id=eq.${user_id}&select=*`);
+    if (!subs.length) continue;
+    const inserted = await rest("push_log?on_conflict=user_id,slot", {
+      method: "POST",
+      headers: { Prefer: "resolution=ignore-duplicates,return=representation" },
+      body: JSON.stringify({ user_id, slot: `weekly-${day}` }),
+    });
+    if (!inserted?.length) continue;
+    const res = await sendTo(subs, {
+      title: "🗓️ Dein Wochenrückblick",
+      body: "Eine ruhige Zusammenfassung deiner Woche – tippe zum Ansehen.",
+      tag: `weekly-${day}`,
+      url: "./?rueckblick=1",
+    });
+    sent += res.sent;
+  }
+  return sent;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
@@ -239,7 +270,8 @@ Deno.serve(async (req) => {
     const results = await Promise.all(rows.map((r: { user_id: string; settings: Settings; tz: string }) =>
       remindUser(r).catch((e) => ({ error: (e as Error).message }))
     ));
-    return out({ users: rows.length, results: results.filter(Boolean) });
+    const weekly = await weeklyPush().catch((e) => ({ error: (e as Error).message }));
+    return out({ users: rows.length, results: results.filter(Boolean), weekly });
   } catch (e) {
     console.error(e);
     return out({ error: (e as Error).message }, 500);

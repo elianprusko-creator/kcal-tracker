@@ -90,6 +90,7 @@ self.addEventListener('notificationclick', (event) => {
             await open.focus();
             // Essens-Erinnerung: in der offenen App direkt die Essensideen zeigen
             if (url.includes('ideen=1')) open.postMessage({ open: 'ideas' });
+            if (url.includes('rueckblick=1')) open.postMessage({ open: 'weekly' });
             return;
         }
         return clients.openWindow(url);

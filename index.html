@@ -719,6 +719,15 @@
             </details>
         </div>
 
+        <!-- Wochenrückblick (sanft, standardmäßig aus) -->
+        <div class="card" id="weekly-card">
+            <div class="card-head">
+                <h3>Wochenrückblick</h3>
+                <label class="switch" title="Wochenrückblick"><input type="checkbox" id="weekly-on"><span></span></label>
+            </div>
+            <div id="weekly-body"></div>
+        </div>
+
         <!-- Gewicht -->
         <div class="card" id="weight-card">
             <div class="card-head">
@@ -1609,6 +1618,10 @@
         showView('today');
         loadDay();
         loadWeights().then(refreshAdaptive);
+        if (/[?&]rueckblick=1/.test(location.search)) {
+            history.replaceState(null, '', location.pathname);
+            setTimeout(() => { showView('progress'); $('weekly-card').scrollIntoView({ behavior: 'smooth' }); }, 600);
+        }
         if (/[?&]ideen=1/.test(location.search)) {
             history.replaceState(null, '', location.pathname);
             setTimeout(openIdeasFromNotification, 800);
@@ -2541,7 +2554,7 @@
         currentView = view;
         document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('active', b.dataset.view === view));
         document.querySelectorAll('#app .view').forEach(v => v.classList.toggle('hidden', v.dataset.view !== view));
-        if (view === 'progress' && currentSession) renderAdaptive();
+        if (view === 'progress' && currentSession) { renderAdaptive(); renderWeekly(); }
         // Eingabeleiste gehört zu "Heute"; in den anderen Reitern stört sie nur
         $('chat-footer').classList.toggle('hidden', view !== 'today');
     }
@@ -4938,6 +4951,7 @@
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (event) => {
             if (event.data?.open === 'ideas') openIdeasFromNotification();
+            if (event.data?.open === 'weekly') { showView('progress'); $('weekly-card').scrollIntoView({ behavior: 'smooth' }); }
         });
     }
 
@@ -5131,6 +5145,82 @@
         userPrefs.adaptive = { ...adaptPrefs(), dismissedOn: todayStr() };
         savePrefs();
         updateAdaptTip();
+    });
+
+    // ---------- Wochenrückblick (sanft) ----------
+    // Bewusst ohne Serien, Punkte, Ranglisten oder "gut/schlecht": nur neutrale Durchschnitte und EIN freundlicher Tipp.
+    // Standardmäßig aus. Bei Hinweisen auf zu wenig Essen ein fürsorglicher Satz statt Lob.
+
+    const weeklyOn = () => !!userPrefs.weekly?.on;
+
+    async function computeWeekly() {
+        const uid = currentSession.user.id;
+        const today = todayStr(), from = addDays(today, -7);
+        const [ent, wat] = await Promise.all([
+            supabase.from('entries').select('day, kcal, protein_g').eq('user_id', uid).gte('day', from).lt('day', today),
+            supabase.from('water').select('day, ml').eq('user_id', uid).gte('day', from).lt('day', today)
+        ]);
+        if (ent.error) return null;
+        const days = new Map();
+        ent.data.forEach(e => {
+            const d = days.get(e.day) || { kcal: 0, p: 0 };
+            d.kcal += Number(e.kcal) || 0;
+            d.p += Number(e.protein_g) || 0;
+            days.set(e.day, d);
+        });
+        const logged = [...days.values()];
+        const avg = f => logged.length ? logged.reduce((s, d) => s + d[f], 0) / logged.length : 0;
+        const waterDays = (wat.data || []).filter(w => Number(w.ml) > 0);
+        const waterAvg = waterDays.length ? waterDays.reduce((s, w) => s + Number(w.ml), 0) / waterDays.length : 0;
+        const w = weightsList.filter(x => x.day >= addDays(today, -14));
+        const trend = w.length >= 2 ? (Number(w.at(-1).kg) - Number(w[0].kg)) / Math.max(1, daysSince(w[0].day) - daysSince(w.at(-1).day)) * 7 : null;
+        const base = formulaTargets();
+        return { loggedDays: logged.length, kcal: avg('kcal'), protein: avg('p'), waterAvg, waterDays: waterDays.length, trend, bmr: base?.bmr || 0 };
+    }
+
+    function weeklyTip(s) {
+        const goalK = Number(profile?.kcal_goal) || 0, goalP = Number(profile?.protein_goal) || 0;
+        const lowDays = s.loggedDays >= 4 && s.bmr && s.kcal < s.bmr * 0.85;
+        const fastLoss = profile?.goal === 'abnehmen' && s.trend != null && s.trend < -(Number(profile.weight_kg) || 80) * 0.01;
+        if (lowDays || fastLoss) {
+            return { care: true, text: 'Diese Woche lag dein Essen deutlich unter dem, was dein Körper braucht. Genug Energie ist wichtig – für Kraft, Laune und Gesundheit. Gönn dir ruhig mehr. Und falls Essen sich gerade belastend anfühlt: Ein Gespräch mit deiner Ärztin, deinem Arzt oder einer Beratungsstelle kann richtig gut tun.' };
+        }
+        if (s.loggedDays < 4) return { text: 'Je öfter du einträgst, desto genauer werden dein Ziel und die Vorschläge – auch grob geschätzte Tage helfen.' };
+        if (goalP && s.protein < goalP * 0.8) return { text: 'Eiweiß kam etwas kurz. Ein einfacher Hebel: zu jeder Mahlzeit eine Eiweißquelle, z. B. Skyr, Eier, Hähnchen, Tofu oder Linsen.' };
+        if (profile?.goal === 'zunehmen' && goalK && s.kcal < goalK * 0.9) return { text: 'Für den Aufbau darf es etwas mehr sein – ein zusätzlicher Snack am Nachmittag (z. B. Nüsse, Brot mit Erdnussbutter) macht viel aus.' };
+        if (s.waterDays && s.waterAvg < waterGoal() * 0.7) return { text: 'Ein Glas Wasser zu jeder Mahlzeit bringt dich ganz nebenbei näher an dein Wasserziel.' };
+        return { text: 'Läuft rund – einfach so weitermachen.' };
+    }
+
+    async function renderWeekly() {
+        $('weekly-on').checked = weeklyOn();
+        if (!weeklyOn()) {
+            $('weekly-body').innerHTML = '<p class="preview-note" style="margin: 0;">Aus. Eingeschaltet siehst du hier jede Woche eine ruhige Zusammenfassung – ohne Bewertung, ohne Serien – und sonntags kommt eine kurze Nachricht.</p>';
+            return;
+        }
+        $('weekly-body').innerHTML = '<p class="preview-note" style="margin: 0;">Wird zusammengefasst …</p>';
+        const s = await computeWeekly();
+        if (!s) return;
+        const tip = weeklyTip(s);
+        const goalK = Number(profile?.kcal_goal) || 0, goalP = Number(profile?.protein_goal) || 0;
+        const line = (label, value) => `<div class="result-line"><span>${label}</span><b>${value}</b></div>`;
+        $('weekly-body').innerHTML = `
+            <p class="preview-note" style="margin: 0 0 6px;">Die letzten 7 Tage</p>
+            ${line('Tage mit Einträgen', `${s.loggedDays} von 7`)}
+            ${s.loggedDays ? line('Ø Kalorien', `${fmt(s.kcal)} kcal${goalK ? ` <span class="sub-text">(Ziel ${fmt(goalK)})</span>` : ''}`) : ''}
+            ${s.loggedDays ? line('Ø Eiweiß', `${fmt(s.protein)} g${goalP ? ` <span class="sub-text">(Ziel ${fmt(goalP)})</span>` : ''}`) : ''}
+            ${s.waterDays ? line('Ø Wasser', `${fmtLiter(s.waterAvg)} l`) : ''}
+            ${s.trend != null ? line('Gewicht', `${s.trend >= 0 ? '+' : '−'}${fmtNum(Math.abs(s.trend))} kg pro Woche`) : ''}
+            <div class="adapt-rec${tip.care ? ' warn' : ''}"><p style="margin: 0;">${tip.care ? '💛 ' : '💡 '}${esc(tip.text)}</p></div>`;
+    }
+
+    $('weekly-on').addEventListener('change', () => {
+        userPrefs.weekly = { ...(userPrefs.weekly || {}), on: $('weekly-on').checked };
+        savePrefs();
+        renderWeekly();
+        if ($('weekly-on').checked && pushSupport().ok && !pushSupport().granted) {
+            showToast('Für die Sonntags-Nachricht Mitteilungen erlauben (🔔 oben).');
+        }
     });
 
     // ---------- Willkommen (nur beim ersten Einrichten) ----------
