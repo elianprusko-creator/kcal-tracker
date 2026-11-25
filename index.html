@@ -375,8 +375,36 @@
         @media (min-width: 560px) { .sheet { align-items: center; } .sheet-box { border-radius: 16px; } }
         .link-btn.accent { color: var(--accent); text-align: left; }
         /* Küche */
-        .kitchen-tabs { display: flex; margin-bottom: 10px; }
-        .kitchen-tabs button { flex: 1; }
+        .kitchen-tabs { display: flex; margin-bottom: 10px; overflow-x: auto; scrollbar-width: none; }
+        .kitchen-tabs::-webkit-scrollbar { display: none; }
+        .kitchen-tabs button { flex: 1 0 auto; white-space: nowrap; padding: 5px 8px; }
+        .week-nav { display: flex; justify-content: space-between; align-items: center; font-weight: 600; margin-bottom: 8px; }
+        .w-day { border-top: 1px solid var(--border); padding: 8px 0; }
+        .w-day.today .w-day-head span:first-child { color: var(--accent); }
+        .w-day.past { opacity: 0.55; }
+        .w-day-head { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+        .w-item { display: flex; align-items: center; gap: 6px; font-size: 14px; padding: 3px 0; }
+        .w-item .w-meal { font-size: 11px; color: var(--mute); width: 62px; flex-shrink: 0; }
+        .w-item .w-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .w-item.done .w-name { text-decoration: line-through; color: var(--mute); }
+        .w-item button { background: none; border: 1px solid var(--border); border-radius: 12px; color: var(--text); font-size: 12px; padding: 3px 8px; cursor: pointer; flex-shrink: 0; }
+        .w-item button.x { border: none; color: var(--mute); padding: 3px 4px; }
+        .w-add { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+        .w-add select, .w-add input { width: auto; flex: 1 1 120px; margin: 0; padding: 6px; font-size: 13px; }
+        .w-add-btn { background: none; border: none; color: var(--accent); font-size: 13px; cursor: pointer; padding: 2px 0; }
+        .s-cat { font-size: 11px; font-weight: 700; color: var(--mute); text-transform: uppercase; letter-spacing: 0.04em; margin: 12px 0 2px; }
+        .s-item, .p-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 14px; }
+        .s-item input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; }
+        .s-item.checked .s-name { text-decoration: line-through; color: var(--mute); }
+        .s-name, .p-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+        .s-amt, .p-meta { font-size: 12px; color: var(--mute); white-space: nowrap; }
+        .p-star { background: none; border: none; font-size: 16px; cursor: pointer; color: var(--mute); padding: 0 2px; }
+        .p-star.on { color: var(--warn); }
+        .p-level { display: inline-flex; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; flex-shrink: 0; }
+        .p-level button { background: none; border: none; color: var(--mute); font-size: 11px; padding: 3px 6px; cursor: pointer; }
+        .p-level button.active { background: var(--field); color: var(--text); font-weight: 700; }
+        .p-level button.active.leer { color: var(--danger); }
+        .p-level button.active.wenig { color: var(--warn); }
         .k-item { padding: 10px 0; border-bottom: 1px solid var(--border); }
         .k-item:last-child { border-bottom: none; }
         .k-head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
@@ -737,12 +765,51 @@
                 <!-- Eingeschaltet -->
                 <div id="kitchen-main" class="hidden">
                     <div class="kitchen-tabs seg">
-                        <button type="button" data-tab="fridge" class="active">Kühlschrank</button>
+                        <button type="button" data-tab="week" class="active">Woche</button>
+                        <button type="button" data-tab="shop">Einkauf</button>
+                        <button type="button" data-tab="pantry">Vorrat</button>
+                        <button type="button" data-tab="fridge">Reste</button>
                         <button type="button" data-tab="recipes">Rezepte</button>
-                        <button type="button" data-tab="settings">Einstellungen</button>
+                        <button type="button" data-tab="settings" title="Einstellungen" aria-label="Einstellungen">⚙</button>
                     </div>
 
-                    <div data-pane="fridge">
+                    <!-- Wochenplan -->
+                    <div data-pane="week">
+                        <div class="week-nav">
+                            <button type="button" class="icon-btn" id="week-prev" title="Vorige Woche">‹</button>
+                            <span id="week-label"></span>
+                            <button type="button" class="icon-btn" id="week-next" title="Nächste Woche">›</button>
+                        </div>
+                        <div class="row" style="margin-bottom: 6px;">
+                            <button type="button" class="btn btn-small" id="week-suggest-btn">Woche füllen</button>
+                            <button type="button" class="btn btn-small btn-sec" id="week-shop-btn">Einkaufsliste erstellen</button>
+                        </div>
+                        <p class="preview-note" id="week-hint" style="margin: 0 0 6px;"></p>
+                        <div id="week-days"></div>
+                    </div>
+
+                    <!-- Einkaufsliste -->
+                    <div data-pane="shop" class="hidden">
+                        <div class="row">
+                            <input type="text" id="shop-input" placeholder="z. B. Bananen, 1 kg Reis" style="margin: 0;">
+                            <button type="button" class="btn btn-small" id="shop-add-btn" style="flex: 0 0 auto;">+</button>
+                        </div>
+                        <div id="shop-list"></div>
+                        <button type="button" class="link-btn hidden" id="shop-clear-btn">Abgehakte entfernen</button>
+                        <p class="preview-note" style="margin: 8px 0 0;">Abhaken legt die Sachen in deinen Vorrat. Mengen kommen aus dem Wochenplan, abzüglich dem, was du noch da hast.</p>
+                    </div>
+
+                    <!-- Vorrat -->
+                    <div data-pane="pantry" class="hidden">
+                        <div class="row">
+                            <input type="text" id="pantry-input" placeholder="z. B. 1 kg Haferflocken" style="margin: 0;">
+                            <button type="button" class="btn btn-small" id="pantry-add-btn" style="flex: 0 0 auto;">+</button>
+                        </div>
+                        <div id="pantry-list"></div>
+                        <p class="preview-note" style="margin: 8px 0 0;">Ungefähr reicht. ★ = Grundvorrat: geht er zur Neige, landet er automatisch auf der Einkaufsliste. Kochen zieht die Zutaten ab.</p>
+                    </div>
+
+                    <div data-pane="fridge" class="hidden">
                         <div id="fridge-list"></div>
                     </div>
 
@@ -780,7 +847,15 @@
                         </label>
                         <label class="remind-row"><input type="checkbox" id="kitchen-home"> Reste auf der Startseite zeigen</label>
                         <label class="remind-row"><input type="checkbox" id="kitchen-suggest"> Reste beim Tippen vorschlagen</label>
-                        <label class="remind-row"><input type="checkbox" id="kitchen-remind"> Essens-Erinnerungen nennen die Reste</label>
+                        <label class="remind-row"><input type="checkbox" id="kitchen-remind"> Essens-Erinnerungen nennen Plan und Reste</label>
+                        <label class="remind-row"><input type="checkbox" id="kitchen-staples"> Grundvorrat automatisch auf die Einkaufsliste</label>
+                        <label style="margin: 12px 0 6px;">Trainingstage (für passende Essensvorschläge)</label>
+                        <div class="chips" id="kitchen-training">
+                            <button type="button" class="chip" data-wd="1">Mo</button><button type="button" class="chip" data-wd="2">Di</button>
+                            <button type="button" class="chip" data-wd="3">Mi</button><button type="button" class="chip" data-wd="4">Do</button>
+                            <button type="button" class="chip" data-wd="5">Fr</button><button type="button" class="chip" data-wd="6">Sa</button>
+                            <button type="button" class="chip" data-wd="0">So</button>
+                        </div>
                         <p class="preview-note" style="margin: 8px 0 12px;">Rezepte und Reste bleiben gespeichert, wenn du die Küche ausschaltest.</p>
                         <button type="button" class="btn btn-sec" id="kitchen-off-btn">Küche ausschalten</button>
                     </div>
@@ -2775,6 +2850,7 @@
     // item.chips = Mengen-Schnellwahl [{ label, factor, amount }] relativ zu den Startwerten
     function showPreview(items, sources, info = {}) {
         showView('today');
+        previewPlanId = null;
         const calls = info.ai_calls ?? null;
         $('preview-meta').innerText = calls === null ? '' :
             `(${calls === 0 ? 'ohne KI' : calls === 1 ? '1 KI-Aufruf' : calls + ' KI-Aufrufe'}` +
@@ -2879,6 +2955,7 @@
         const rows = readPreviewRows().map(row => ({ ...row, meal }));
         rememberProductCorrections();
         const leftoverUse = collectLeftoverUse();
+        const planId = previewPlanId;
 
         saveBtn.disabled = true;
         const result = await insertEntries(rows);
@@ -2891,6 +2968,7 @@
         }
 
         if (leftoverUse.length) applyLeftoverUse(leftoverUse);
+        if (planId) markPlan(planId, 'gegessen');
         if (result.queued) showToast('Offline gespeichert – wird hochgeladen, sobald du wieder Netz hast.');
         $('food-input').value = '';
         fitFoodInput();
@@ -3666,6 +3744,8 @@
         if (!rec.error) recipesList = rec.data;
         if (!left.error) leftoversList = left.data;
         renderKitchen();
+        await loadKitchen2();
+        checkPantryForecast();
     }
 
     // ----- Anzeige -----
@@ -3682,6 +3762,10 @@
         placeKitchenCard();
         renderFridge();
         renderRecipes();
+        renderTrainingDays();
+        renderWeek();
+        renderShopping();
+        renderPantry();
     }
 
     // Wie lange noch gut? cooked_on + keep_days im Vergleich zu heute
@@ -3926,7 +4010,7 @@
     $('kitchen-main').addEventListener('click', onKitchenClick);
     $('fridge-card').addEventListener('click', onKitchenClick);
 
-    async function cookRecipe(id, portions, days) {
+    async function cookRecipe(id, portions, days, silent = false) {
         const r = recipesList.find(x => x.id === id);
         if (!r || !portions) return;
         const { total } = recipeTotals(r.ingredients || [], r.servings);
@@ -3954,7 +4038,9 @@
         cookingId = null;
         leftoversList.push(data);
         renderKitchen();
-        showToast(`${fmtNum(portions)} Portionen ${r.name} im Kühlschrank`, 'Jetzt 1 essen', () => showPreview([leftoverItem(data)], [], {}));
+        await useFromPantry(r.ingredients, 1);
+        if (!silent) showToast(`${fmtNum(portions)} Portionen ${r.name} im Kühlschrank`, 'Jetzt 1 essen', () => showPreview([leftoverItem(data)], [], {}));
+        return data;
     }
 
     async function deleteRecipe(id) {
@@ -4127,6 +4213,519 @@
         openRecipeEditor(null, rows, name);
     });
 
+    // ---------- Küche Stufe 2–4: Wochenplan, Einkaufsliste, Vorrat ----------
+    // Kreislauf: Woche planen -> Einkaufsliste (Bedarf minus Vorrat) -> Abhaken füllt den Vorrat ->
+    // Kochen zieht Zutaten ab und legt Reste an -> Essen trägt ein -> Grundvorrat wird rechtzeitig nachgekauft.
+
+    const MEAL_ORDER = ['fruehstueck', 'mittag', 'snack', 'abend'];
+    const MEAL_SHORT = { fruehstueck: 'Frühstück', mittag: 'Mittag', snack: 'Snack', abend: 'Abend' };
+    const WEEKDAY = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+
+    let planList = [];
+    let shoppingList = [];
+    let pantryList = [];
+    let weekStart = mondayOf(todayStr());
+    let addingDay = null;          // Tag, bei dem gerade "+ hinzufügen" offen ist
+    let previewPlanId = null;      // Plan-Eintrag, der gerade über die Vorschau eingetragen wird
+
+    function mondayOf(day) {
+        const d = parseDay(day);
+        return addDays(day, -((d.getDay() + 6) % 7));
+    }
+
+    // Namen vergleichbar machen: "Hähnchenbrust roh (TK)" -> "hähnchenbrust"
+    function normName(name) {
+        return String(name || '').toLowerCase()
+            .replace(/\(.*?\)/g, ' ')
+            .replace(/\b(roh|gekocht|frisch|tk|bio|ungekocht|getrocknet|natur)\b/g, ' ')
+            .replace(/[^a-zäöüß ]/g, ' ').replace(/\s+/g, ' ').trim();
+    }
+
+    function sameFood(a, b) {
+        const x = normName(a), y = normName(b);
+        if (!x || !y) return false;
+        if (x === y) return true;
+        const short = x.length < y.length ? x : y, long = x.length < y.length ? y : x;
+        return short.length >= 4 && long.includes(short);
+    }
+
+    // "1 kg Reis" -> { name: 'Reis', grams: 1000 }, "2 Bananen" -> { name: 'Bananen', amount: '2' }
+    function parseAmountLine(text) {
+        const t = String(text).trim();
+        const m = t.match(/^(\d+(?:[.,]\d+)?)\s*(kg|g|gramm|l|ml)?\s+(.+)$/i);
+        if (!m) return { name: t, grams: null, amount: '' };
+        const n = num(m[1]);
+        const unit = (m[2] || '').toLowerCase();
+        if (unit === 'kg' || unit === 'l') return { name: m[3].trim(), grams: n * 1000, amount: '' };
+        if (unit) return { name: m[3].trim(), grams: n, amount: '' };
+        return { name: m[3].trim(), grams: null, amount: m[1] };
+    }
+
+    const SHOP_CATS = [
+        ['Obst & Gemüse', /apfel|banane|beere|zitron|orange|tomate|gurke|paprika|zwiebel|knoblauch|salat|spinat|brokkoli|karotte|möhre|kartoffel|zucchini|pilz|champignon|avocado|obst|gemüse|kräuter|petersilie|ingwer|lauch|kohl|mais|erbsen|bohnen(?!.*dose)/],
+        ['Fleisch & Fisch', /hähnchen|huhn|pute|rind|hack|schwein|schinken|wurst|salami|speck|lachs|thunfisch|fisch|garnele|steak|filet|fleisch/],
+        ['Milch & Eier', /milch|joghurt|skyr|quark|käse|mozzarella|feta|sahne|butter|ei\b|eier|frischkäse|kefir/],
+        ['Brot & Backwaren', /brot|brötchen|toast|wrap|tortilla|baguette|bagel/],
+        ['Vorrat & Trockenes', /reis|nudel|pasta|spaghetti|hafer|mehl|zucker|öl|essig|soße|sauce|gewürz|salz|pfeffer|dose|linsen|kichererbsen|müsli|cornflakes|honig|mus|nuss|mandel|erdnuss|brühe|tomatenmark|passiert/],
+        ['Tiefkühl', /tk\b|tiefkühl|gefroren|pizza|eis\b/],
+        ['Getränke', /wasser|saft|cola|limo|kaffee|tee|bier|wein|drink/]
+    ];
+
+    function shopCategory(name) {
+        const n = String(name).toLowerCase();
+        return (SHOP_CATS.find(([, re]) => re.test(n)) || ['Sonstiges'])[0];
+    }
+
+    function fmtGrams(g) {
+        if (!g) return '';
+        return g >= 1000 ? `${fmtNum(Math.round(g / 100) / 10)} kg` : `${Math.round(g >= 100 ? Math.ceil(g / 50) * 50 : g)} g`;
+    }
+
+    async function loadKitchen2() {
+        const uid = currentSession.user.id;
+        const [plan, shop, pantry] = await Promise.all([
+            supabase.from('meal_plan').select('*').eq('user_id', uid).gte('day', addDays(weekStart, -7)).lte('day', addDays(weekStart, 13)).order('day'),
+            supabase.from('shopping_items').select('*').eq('user_id', uid).order('created_at'),
+            supabase.from('pantry_items').select('*').eq('user_id', uid).order('name')
+        ]);
+        if (!plan.error) planList = plan.data;
+        if (!shop.error) shoppingList = shop.data;
+        if (!pantry.error) pantryList = pantry.data;
+        renderWeek();
+        renderShopping();
+        renderPantry();
+    }
+
+    function kitchenErr(error) {
+        alert('Speichern fehlgeschlagen: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+    }
+
+    // ----- Wochenplan -----
+
+    function planKcal(p) {
+        const r = recipesList.find(x => x.id === p.recipe_id);
+        if (!r) return null;
+        return recipeTotals(r.ingredients || [], r.servings).per.kcal * Number(p.portions || 1);
+    }
+
+    function renderWeek() {
+        const end = addDays(weekStart, 6);
+        const fmtD = d => parseDay(d).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' });
+        $('week-label').innerText = weekStart === mondayOf(todayStr()) ? `Diese Woche · ${fmtD(weekStart)}–${fmtD(end)}` : `${fmtD(weekStart)} – ${fmtD(end)}`;
+        $('week-hint').innerText = recipesList.length
+            ? '„Woche füllen“ plant Mittag und Abend mit deinen Rezepten – einmal kochen, mehrmals essen. Frühstück und Snacks trägst du bei Bedarf selbst ein.'
+            : 'Leg unter „Rezepte“ ein paar Gerichte an, dann kann die App die Woche für dich füllen.';
+        const today = todayStr();
+        let html = '';
+        for (let i = 0; i < 7; i++) {
+            const day = addDays(weekStart, i);
+            const items = planList.filter(p => p.day === day).sort((a, b) => MEAL_ORDER.indexOf(a.meal) - MEAL_ORDER.indexOf(b.meal));
+            const kcal = items.reduce((s, p) => s + (planKcal(p) || 0), 0);
+            html += `<div class="w-day${day === today ? ' today' : ''}${day < today ? ' past' : ''}">
+                <div class="w-day-head"><span>${WEEKDAY[parseDay(day).getDay()]} ${fmtD(day)}${day === today ? ' · heute' : ''}</span>
+                    <span class="sub-text">${kcal ? `≈ ${fmt(kcal)} kcal geplant` : ''}</span></div>
+                ${items.map(p => `
+                    <div class="w-item${p.status !== 'geplant' ? ' done' : ''}">
+                        <span class="w-meal">${MEAL_SHORT[p.meal]}</span>
+                        <span class="w-name">${p.cook ? '🍳 ' : ''}${esc(p.name)}${p.cook ? ' <span class="sub-text">kochen</span>' : ''}${p.status === 'ausgelassen' ? ' <span class="sub-text">· ausgelassen</span>' : ''}</span>
+                        ${p.status === 'geplant' && day <= today ? `<button type="button" data-plan-eat="${p.id}">✓ Gegessen</button>` : ''}
+                        <button type="button" class="x" data-plan-del="${p.id}" title="Entfernen">✕</button>
+                    </div>`).join('')}
+                ${addingDay === day ? planAddForm(day) : `<button type="button" class="w-add-btn" data-plan-add="${day}">+ hinzufügen</button>`}
+            </div>`;
+        }
+        $('week-days').innerHTML = html;
+    }
+
+    function planAddForm(day) {
+        const h = new Date().getHours();
+        const defMeal = day === todayStr() ? mealOfTime() : 'abend';
+        return `<div class="w-add">
+            <select id="plan-add-meal">${MEAL_ORDER.map(m => `<option value="${m}"${m === defMeal ? ' selected' : ''}>${MEAL_SHORT[m]}</option>`).join('')}</select>
+            <select id="plan-add-what">
+                ${leftoversList.length ? `<optgroup label="Reste">${leftoversList.map(l => `<option value="l:${l.id}">${esc(l.name)} (Rest)</option>`).join('')}</optgroup>` : ''}
+                ${recipesList.length ? `<optgroup label="Rezepte">${recipesList.map(r => `<option value="r:${r.id}">${esc(r.name)}</option>`).join('')}</optgroup>` : ''}
+                <option value="free">Etwas anderes …</option>
+            </select>
+            <input type="text" id="plan-add-free" class="hidden" placeholder="z. B. Döner, Essen bei Oma">
+            <button type="button" class="btn btn-small" data-plan-save="${day}" style="width: auto; flex: 0 0 auto;">OK</button>
+        </div>`;
+    }
+
+    async function insertPlan(rows) {
+        const uid = currentSession.user.id;
+        const { data, error } = await supabase.from('meal_plan').insert(rows.map(r => ({ user_id: uid, ...r }))).select();
+        if (error) { kitchenErr(error); return false; }
+        planList = planList.concat(data);
+        renderWeek();
+        return true;
+    }
+
+    async function savePlanAdd(day) {
+        const meal = $('plan-add-meal').value;
+        const what = $('plan-add-what').value;
+        let row;
+        if (what.startsWith('l:')) {
+            const l = leftoversList.find(x => x.id === what.slice(2));
+            row = { day, meal, name: l.name, recipe_id: l.recipe_id, cook: false };
+        } else if (what.startsWith('r:')) {
+            const r = recipesList.find(x => x.id === what.slice(2));
+            // Erstes Mal in der Woche = kochen, danach Reste davon
+            const cookedBefore = planList.some(p => p.recipe_id === r.id && p.day <= day && p.day >= addDays(day, -(kitchen.keepDays - 1)) && p.cook);
+            row = { day, meal, name: r.name, recipe_id: r.id, cook: !cookedBefore };
+        } else {
+            const name = $('plan-add-free').value.trim();
+            if (!name) return $('plan-add-free').focus();
+            row = { day, meal, name, cook: false };
+        }
+        addingDay = null;
+        await insertPlan([row]);
+    }
+
+    // Woche füllen: freie Mittag-/Abend-Plätze ab heute mit Resten, dann mit Rezepten im Batch (einmal kochen, mehrmals essen)
+    async function suggestWeek() {
+        if (!recipesList.length) {
+            openKitchenTab('recipes');
+            showToast('Leg zuerst ein paar Rezepte an.');
+            return;
+        }
+        const today = todayStr();
+        const slots = [];
+        for (let i = 0; i < 7; i++) {
+            const day = addDays(weekStart, i);
+            if (day < today) continue;
+            for (const meal of ['mittag', 'abend']) {
+                if (!planList.some(p => p.day === day && p.meal === meal)) slots.push({ day, meal });
+            }
+        }
+        if (!slots.length) return showToast('Mittag und Abend sind schon verplant.');
+
+        const rows = [];
+        // 1. Vorhandene Reste zuerst (die ältesten zuerst)
+        for (const l of [...leftoversList].sort((a, b) => a.cooked_on.localeCompare(b.cooked_on))) {
+            const lastDay = addDays(l.cooked_on, Number(l.keep_days) - 1);
+            let n = Math.floor(Number(l.portions_left));
+            while (n > 0 && slots.length && slots[0].day <= lastDay) {
+                const s = slots.shift();
+                rows.push({ ...s, name: l.name, recipe_id: l.recipe_id, cook: false });
+                n--;
+            }
+        }
+        // 2. Rezepte reihum, eiweißreiche zuerst; jedes Rezept deckt so viele Plätze wie es Portionen hat (innerhalb der Haltbarkeit)
+        const pool = [...recipesList].sort((a, b) => {
+            const pa = recipeTotals(a.ingredients || [], a.servings).per, pb = recipeTotals(b.ingredients || [], b.servings).per;
+            return (pb.protein_g / Math.max(1, pb.kcal)) - (pa.protein_g / Math.max(1, pa.kcal));
+        });
+        let k = 0;
+        while (slots.length) {
+            const r = pool[k++ % pool.length];
+            const first = slots.shift();
+            rows.push({ ...first, name: r.name, recipe_id: r.id, cook: true });
+            const lastDay = addDays(first.day, kitchen.keepDays - 1);
+            let left = Math.max(1, Math.floor(Number(r.servings))) - 1;
+            while (left > 0 && slots.length && slots[0].day <= lastDay) {
+                rows.push({ ...slots.shift(), name: r.name, recipe_id: r.id, cook: false });
+                left--;
+            }
+        }
+        if (await insertPlan(rows)) showToast(`${rows.length} Mahlzeiten geplant – jetzt die Einkaufsliste erstellen?`, 'Erstellen', buildShoppingList);
+    }
+
+    // Plan-Eintrag essen: Rest vorhanden -> Portion; Kochtag -> erst kochen; sonst Rezept-Portion; frei -> Eingabe
+    async function eatPlanItem(id) {
+        const p = planList.find(x => x.id === id);
+        if (!p) return;
+        let l = leftoversList.find(x => (p.recipe_id ? x.recipe_id === p.recipe_id : x.name === p.name) && Number(x.portions_left) > 0);
+        const r = recipesList.find(x => x.id === p.recipe_id);
+        if (!l && r && p.cook && confirm(`Hast du „${r.name}“ gekocht (${fmtNum(r.servings)} Portionen)? Dann landet der Rest im Kühlschrank und die Zutaten werden vom Vorrat abgezogen.`)) {
+            l = await cookRecipe(r.id, Number(r.servings), kitchen.keepDays, true);
+        }
+        if (l) {
+            showPreview([leftoverItem(l)], [], {});
+        } else if (r) {
+            showPreview([recipeItem(r)], [], {});
+        } else {
+            showView('today');
+            $('food-input').value = p.name;
+            fitFoodInput();
+            $('food-input').focus();
+            await markPlan(id, 'gegessen');
+            return;
+        }
+        previewPlanId = id;
+    }
+
+    async function markPlan(id, status) {
+        const { error } = await supabase.from('meal_plan').update({ status }).eq('id', id);
+        if (error) return kitchenErr(error);
+        planList = planList.map(p => p.id === id ? { ...p, status } : p);
+        renderWeek();
+    }
+
+    async function deletePlan(id) {
+        const { error } = await supabase.from('meal_plan').delete().eq('id', id);
+        if (error) return kitchenErr(error);
+        planList = planList.filter(p => p.id !== id);
+        renderWeek();
+    }
+
+    $('week-prev').addEventListener('click', () => { weekStart = addDays(weekStart, -7); addingDay = null; loadKitchen2(); });
+    $('week-next').addEventListener('click', () => { weekStart = addDays(weekStart, 7); addingDay = null; loadKitchen2(); });
+    $('week-suggest-btn').addEventListener('click', suggestWeek);
+    $('week-shop-btn').addEventListener('click', buildShoppingList);
+    $('week-days').addEventListener('click', (event) => {
+        const b = event.target.closest('button');
+        if (!b) return;
+        const d = b.dataset;
+        if (d.planAdd) { addingDay = d.planAdd; renderWeek(); }
+        else if (d.planSave) savePlanAdd(d.planSave);
+        else if (d.planEat) eatPlanItem(d.planEat);
+        else if (d.planDel) deletePlan(d.planDel);
+    });
+    $('week-days').addEventListener('change', (event) => {
+        if (event.target.id === 'plan-add-what') $('plan-add-free').classList.toggle('hidden', event.target.value !== 'free');
+    });
+
+    // ----- Einkaufsliste -----
+
+    // Bedarf der Woche (ab heute): Rezepte, die gekocht werden, × Zutaten – minus Vorrat – plus knapper Grundvorrat
+    async function buildShoppingList() {
+        const today = todayStr();
+        const week = planList.filter(p => p.day >= today && p.day <= addDays(weekStart, 6) && p.status === 'geplant' && p.recipe_id);
+        const need = new Map(); // normName -> { name, grams }
+        const batches = new Map();
+        for (const p of week) {
+            const r = recipesList.find(x => x.id === p.recipe_id);
+            if (!r) continue;
+            const b = batches.get(r.id) || { r, cook: 0, portions: 0 };
+            if (p.cook) b.cook++;
+            b.portions += Number(p.portions || 1);
+            batches.set(r.id, b);
+        }
+        for (const { r, cook, portions } of batches.values()) {
+            const have = leftoversList.filter(l => l.recipe_id === r.id).reduce((s, l) => s + Number(l.portions_left), 0);
+            const times = Math.max(cook, Math.ceil(Math.max(0, portions - have) / Math.max(1, Number(r.servings))));
+            for (const ing of r.ingredients || []) {
+                const key = normName(ing.name) || ing.name.toLowerCase();
+                const cur = need.get(key) || { name: ing.name.replace(/\s*\(.*?\)\s*/g, ' ').replace(/\b(roh|gekocht|ungekocht)\b/gi, '').trim(), grams: 0, count: 0 };
+                cur.grams += (Number(ing.grams) || 0) * times;
+                cur.count += times;
+                need.set(key, cur);
+            }
+        }
+        const items = [];
+        for (const it of need.values()) {
+            const p = pantryList.find(x => sameFood(x.name, it.name));
+            let grams = it.grams;
+            if (p) {
+                if (p.grams == null) { if (p.level === 'voll') continue; }
+                else grams -= Number(p.grams);
+            }
+            if (it.grams && grams <= 0) continue;
+            items.push({ name: it.name, grams: it.grams ? Math.round(grams) : null, amount: it.grams ? '' : `für ${it.count}× kochen`, source: 'plan' });
+        }
+        if (kitchen.autoStaples !== false) {
+            for (const p of pantryList.filter(x => x.staple && x.level !== 'voll')) {
+                if (!items.some(i => sameFood(i.name, p.name))) items.push({ name: p.name, grams: null, amount: p.level === 'leer' ? 'leer' : 'wird knapp', source: 'vorrat' });
+            }
+        }
+        // Alte, nicht abgehakte Plan-Einträge ersetzen; selbst eingetragene bleiben
+        const uid = currentSession.user.id;
+        const old = shoppingList.filter(s => !s.checked && s.source !== 'manuell').map(s => s.id);
+        if (old.length) await supabase.from('shopping_items').delete().in('id', old);
+        shoppingList = shoppingList.filter(s => !old.includes(s.id));
+        const fresh = items.filter(i => !shoppingList.some(s => !s.checked && sameFood(s.name, i.name)));
+        if (fresh.length) {
+            const { data, error } = await supabase.from('shopping_items')
+                .insert(fresh.map(i => ({ user_id: uid, ...i, category: shopCategory(i.name) }))).select();
+            if (error) return kitchenErr(error);
+            shoppingList = shoppingList.concat(data);
+        }
+        renderShopping();
+        openKitchenTab('shop');
+        showToast(fresh.length ? `${fresh.length} Sachen auf der Einkaufsliste` : 'Du hast schon alles da 👍');
+    }
+
+    function renderShopping() {
+        if (!shoppingList.length) {
+            $('shop-list').innerHTML = '<div class="k-empty">Leer. Plane die Woche und tippe auf „Einkaufsliste erstellen“ – oder trag selbst etwas ein.</div>';
+            $('shop-clear-btn').classList.add('hidden');
+            return;
+        }
+        const cats = [...new Set([...SHOP_CATS.map(c => c[0]), 'Sonstiges'])];
+        const open = shoppingList.filter(s => !s.checked), done = shoppingList.filter(s => s.checked);
+        const row = s => `
+            <label class="s-item${s.checked ? ' checked' : ''}">
+                <input type="checkbox" data-shop="${s.id}" ${s.checked ? 'checked' : ''}>
+                <span class="s-name">${esc(s.name)}</span>
+                <span class="s-amt">${esc(s.grams ? fmtGrams(Number(s.grams)) : s.amount || '')}</span>
+            </label>`;
+        $('shop-list').innerHTML = cats.map(c => {
+            const list = open.filter(s => s.category === c);
+            return list.length ? `<div class="s-cat">${esc(c)}</div>${list.map(row).join('')}` : '';
+        }).join('') + (done.length ? `<div class="s-cat">Im Wagen</div>${done.map(row).join('')}` : '');
+        $('shop-clear-btn').classList.toggle('hidden', !done.length);
+    }
+
+    async function addShopping(text) {
+        const it = parseAmountLine(text);
+        if (!it.name) return;
+        const { data, error } = await supabase.from('shopping_items').insert({
+            user_id: currentSession.user.id, name: capWords(it.name), grams: it.grams, amount: it.amount, source: 'manuell', category: shopCategory(it.name)
+        }).select().single();
+        if (error) return kitchenErr(error);
+        shoppingList.push(data);
+        renderShopping();
+    }
+
+    // Abhaken = gekauft -> in den Vorrat
+    async function toggleShopping(id, checked) {
+        const s = shoppingList.find(x => x.id === id);
+        if (!s) return;
+        const { error } = await supabase.from('shopping_items').update({ checked }).eq('id', id);
+        if (error) return kitchenErr(error);
+        s.checked = checked;
+        renderShopping();
+        if (checked) await addToPantry(s.name, s.grams ? Number(s.grams) : null, true);
+    }
+
+    $('shop-add-btn').addEventListener('click', () => { addShopping($('shop-input').value); $('shop-input').value = ''; });
+    $('shop-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('shop-add-btn').click(); });
+    $('shop-list').addEventListener('change', (e) => { if (e.target.dataset.shop) toggleShopping(e.target.dataset.shop, e.target.checked); });
+    $('shop-clear-btn').addEventListener('click', async () => {
+        const ids = shoppingList.filter(s => s.checked).map(s => s.id);
+        const { error } = await supabase.from('shopping_items').delete().in('id', ids);
+        if (error) return kitchenErr(error);
+        shoppingList = shoppingList.filter(s => !s.checked);
+        renderShopping();
+    });
+
+    // ----- Vorrat -----
+
+    // Verbrauch pro Tag seit dem letzten Auffüllen -> "reicht noch etwa X Tage"
+    function pantryDaysLeft(p) {
+        const days = Math.max(1, daysSince(p.since_day));
+        const perDay = Number(p.used_g) / days;
+        if (p.grams == null || perDay <= 0 || days < 3) return null;
+        return Math.round(Number(p.grams) / perDay);
+    }
+
+    function renderPantry() {
+        if (!pantryList.length) {
+            $('pantry-list').innerHTML = '<div class="k-empty">Noch leer. Abgehakte Einkäufe landen automatisch hier, oder trag ein, was du daheim hast.</div>';
+            return;
+        }
+        const order = { leer: 0, wenig: 1, voll: 2 };
+        $('pantry-list').innerHTML = [...pantryList].sort((a, b) => order[a.level] - order[b.level] || a.name.localeCompare(b.name)).map(p => {
+            const left = pantryDaysLeft(p);
+            return `<div class="p-item">
+                <button type="button" class="p-star${p.staple ? ' on' : ''}" data-staple="${p.id}" title="Grundvorrat">${p.staple ? '★' : '☆'}</button>
+                <span class="p-name">${esc(p.name)}<br><span class="p-meta">${p.grams != null ? '≈ ' + fmtGrams(Number(p.grams)) : ''}${left != null ? ` · reicht ca. ${left} Tage` : ''}</span></span>
+                <span class="p-level">${['voll', 'wenig', 'leer'].map(l => `<button type="button" class="${l}${p.level === l ? ' active' : ''}" data-level="${l}" data-pid="${p.id}">${l}</button>`).join('')}</span>
+                <button type="button" class="p-star" data-pdel="${p.id}" title="Entfernen">✕</button>
+            </div>`;
+        }).join('');
+    }
+
+    async function upsertPantry(row) {
+        const { data, error } = await supabase.from('pantry_items').upsert({ user_id: currentSession.user.id, ...row, updated_at: new Date().toISOString() }, { onConflict: 'user_id,name' }).select().single();
+        if (error) { kitchenErr(error); return null; }
+        pantryList = pantryList.filter(p => p.id !== data.id && p.name !== data.name).concat(data);
+        renderPantry();
+        return data;
+    }
+
+    async function addToPantry(name, grams, restock = false) {
+        const p = pantryList.find(x => sameFood(x.name, name));
+        if (p) {
+            const g = grams != null ? Number(p.grams || 0) + grams : p.grams;
+            return upsertPantry({ name: p.name, grams: g, level: 'voll', staple: p.staple, used_g: restock ? 0 : p.used_g, since_day: restock ? todayStr() : p.since_day });
+        }
+        return upsertPantry({ name: capWords(String(name).trim()), grams, level: 'voll', staple: false, used_g: 0, since_day: todayStr() });
+    }
+
+    // Kochen: Zutaten vom Vorrat abziehen; Grundvorrat, der knapp wird, auf die Einkaufsliste
+    async function useFromPantry(ingredients, times = 1) {
+        const low = [];
+        for (const ing of ingredients || []) {
+            const p = pantryList.find(x => sameFood(x.name, ing.name));
+            const g = (Number(ing.grams) || 0) * times;
+            if (!p || !g) continue;
+            const start = Number(p.grams || 0) + Number(p.used_g || 0);
+            const grams = p.grams == null ? null : Math.max(0, Number(p.grams) - g);
+            let level = p.level;
+            if (grams != null) level = grams <= 0 ? 'leer' : grams < start * 0.25 ? 'wenig' : 'voll';
+            const saved = await upsertPantry({ name: p.name, grams, level, staple: p.staple, used_g: Number(p.used_g || 0) + g, since_day: p.since_day });
+            if (saved?.staple && level !== 'voll') low.push(saved);
+        }
+        await refillStaples(low);
+    }
+
+    async function refillStaples(list) {
+        if (kitchen.autoStaples === false || !list.length) return;
+        const fresh = list.filter(p => !shoppingList.some(s => !s.checked && sameFood(s.name, p.name)));
+        if (!fresh.length) return;
+        const { data, error } = await supabase.from('shopping_items').insert(fresh.map(p => ({
+            user_id: currentSession.user.id, name: p.name, grams: null, amount: p.level === 'leer' ? 'leer' : 'wird knapp', source: 'vorrat', category: shopCategory(p.name)
+        }))).select();
+        if (error) return;
+        shoppingList = shoppingList.concat(data);
+        renderShopping();
+        showToast(`Auf die Einkaufsliste: ${fresh.map(p => p.name).join(', ')}`);
+    }
+
+    // Grundvorrat, der laut Verbrauch in 3 Tagen leer ist, rechtzeitig nachkaufen
+    async function checkPantryForecast() {
+        const soon = pantryList.filter(p => p.staple && p.level === 'voll' && (pantryDaysLeft(p) ?? 99) <= 3);
+        for (const p of soon) await upsertPantry({ name: p.name, grams: p.grams, level: 'wenig', staple: true, used_g: p.used_g, since_day: p.since_day });
+        await refillStaples(soon.map(p => pantryList.find(x => x.name === p.name)).filter(Boolean));
+    }
+
+    $('pantry-add-btn').addEventListener('click', () => {
+        const it = parseAmountLine($('pantry-input').value);
+        if (it.name) addToPantry(it.name, it.grams, true);
+        $('pantry-input').value = '';
+    });
+    $('pantry-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('pantry-add-btn').click(); });
+    $('pantry-list').addEventListener('click', async (e) => {
+        const b = e.target.closest('button');
+        if (!b) return;
+        const p = pantryList.find(x => x.id === (b.dataset.pid || b.dataset.staple || b.dataset.pdel));
+        if (!p) return;
+        if (b.dataset.pdel) {
+            const { error } = await supabase.from('pantry_items').delete().eq('id', p.id);
+            if (error) return kitchenErr(error);
+            pantryList = pantryList.filter(x => x.id !== p.id);
+            return renderPantry();
+        }
+        const row = { name: p.name, grams: p.grams, level: p.level, staple: p.staple, used_g: p.used_g, since_day: p.since_day };
+        if (b.dataset.staple) row.staple = !p.staple;
+        if (b.dataset.level) {
+            row.level = b.dataset.level;
+            if (row.level === 'leer') row.grams = p.grams != null ? 0 : null;
+        }
+        const saved = await upsertPantry(row);
+        if (saved?.staple && saved.level !== 'voll') refillStaples([saved]);
+    });
+
+    // Trainingstage (für "Was soll ich essen?" und den Plan)
+    function renderTrainingDays() {
+        const days = kitchen.trainingDays || [];
+        $('kitchen-training').querySelectorAll('[data-wd]').forEach(c => c.classList.toggle('active', days.includes(Number(c.dataset.wd))));
+        $('kitchen-staples').checked = kitchen.autoStaples !== false;
+    }
+    $('kitchen-training').addEventListener('click', (e) => {
+        const c = e.target.closest('[data-wd]');
+        if (!c) return;
+        const wd = Number(c.dataset.wd);
+        const days = new Set(kitchen.trainingDays || []);
+        days.has(wd) ? days.delete(wd) : days.add(wd);
+        kitchen.trainingDays = [...days];
+        renderTrainingDays();
+        saveKitchenPrefs();
+    });
+    $('kitchen-staples').addEventListener('change', () => { kitchen.autoStaples = $('kitchen-staples').checked; saveKitchenPrefs(); });
+
     // ---------- Spracheingabe ----------
     // Leeres Eingabefeld: Senden-Knopf wird zum Mikrofon (wie bei Messengern). Erkannt wird über den Browser (kostenlos),
     // der Text landet im Feld und kann vor dem Senden korrigiert werden.
@@ -4215,7 +4814,10 @@
             },
             heute_gegessen: { kcal: Math.round(t.kcal), protein_g: Math.round(t.protein_g), carbs_g: Math.round(t.carbs_g), fat_g: Math.round(t.fat_g) },
             mahlzeiten_uebrig: mealsLeftToday(),
-            training: { gleich: 'Training in 1–3 Stunden', vorhin: 'Training gerade beendet' }[ideasTraining] || 'nicht relevant',
+            training: { gleich: 'Training in 1–3 Stunden', vorhin: 'Training gerade beendet' }[ideasTraining] ||
+                ((kitchen.trainingDays || []).includes(new Date().getDay()) ? 'heute ist ein Trainingstag (Uhrzeit unbekannt)' : 'nicht relevant'),
+            geplant_heute: kitchen.on ? planList.filter(p => p.day === todayStr() && p.status === 'geplant').map(p => `${MEAL_SHORT[p.meal]}: ${p.name}`) : [],
+            vorrat: kitchen.on ? pantryList.filter(p => p.level !== 'leer').map(p => p.name).slice(0, 30) : [],
             reste: kitchen.on ? leftoversList.map(l => ({ name: l.name, portionen: Number(l.portions_left), kcal_pro_portion: Number(l.kcal), eiweiss_pro_portion: Number(l.protein_g) })) : [],
             rezepte: kitchen.on ? recipesList.map(r => r.name) : [],
             haeufig: top

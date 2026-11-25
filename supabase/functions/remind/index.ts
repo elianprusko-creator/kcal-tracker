@@ -160,6 +160,13 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
         const prefs = await rest(`user_prefs?user_id=eq.${row.user_id}&select=prefs`);
         const k = prefs[0]?.prefs?.kitchen;
         if (k?.on && k.inReminders !== false) {
+          // Geplantes Gericht für diese Mahlzeit zuerst nennen
+          const planned: { name: string; cook: boolean }[] = await rest(
+            `meal_plan?user_id=eq.${row.user_id}&day=eq.${day}&meal=eq.${dueMeal.meal}&status=eq.geplant&select=name,cook`,
+          );
+          if (planned.length) {
+            body = `Geplant: ${planned.map((p) => p.cook ? `${p.name} (heute kochen)` : p.name).join(", ")}. ` + body;
+          }
           const left: { name: string; portions_left: number }[] = await rest(
             `leftovers?user_id=eq.${row.user_id}&done_at=is.null&portions_left=gt.0&select=name,portions_left&order=cooked_on.asc&limit=3`,
           );
