@@ -1680,6 +1680,7 @@
         loadDay();
         loadWeights().then(refreshAdaptive);
         renderPlate();
+        checkLostCameraPhoto();
         if (/[?&]wach=1/.test(location.search)) {
             history.replaceState(null, '', location.pathname);
             setTimeout(() => sendWakeNow(), 400);
@@ -2824,11 +2825,27 @@
         fitFoodInput();
     }
 
+    // Foto gewählt/aufgenommen -> gleich auswerten (ein eventuell getippter Text geht als Hinweis mit)
     ['camera-input', 'image-input'].forEach(id => $(id).addEventListener('change', () => {
+        sessionStorage.removeItem('cameraOpenAt');
         const file = $(id).files[0];
         $(id).value = ''; // gleiche Datei nochmal wählbar
-        if (file) setPickedImage(file);
+        if (!file) return;
+        setPickedImage(file);
+        if (hasAi()) $('send-btn').click();
     }));
+    // Android beendet die Seite manchmal, während die Kamera-App offen ist -> Foto geht verloren.
+    // Merken, dass die Kamera offen war, und nach dem Neuladen erklären, was passiert ist.
+    document.querySelectorAll('label[for="camera-input"], label[for="menu-input"], label[for="plate-input"]').forEach(l =>
+        l.addEventListener('click', () => sessionStorage.setItem('cameraOpenAt', String(Date.now()))));
+    document.addEventListener('change', (e) => { if (e.target.type === 'file') sessionStorage.removeItem('cameraOpenAt'); }, true);
+    function checkLostCameraPhoto() {
+        const at = Number(sessionStorage.getItem('cameraOpenAt') || 0);
+        sessionStorage.removeItem('cameraOpenAt');
+        if (at && Date.now() - at < 5 * 60 * 1000) {
+            showStatus('Das Handy hat die App geschlossen, während die Kamera offen war – das Foto ist dabei verloren gegangen. Tipp: Foto mit der normalen Kamera-App machen und dann über 📷 → „Aus Galerie wählen“ nehmen.', true, false);
+        }
+    }
 
     $('photo-btn').addEventListener('click', (event) => {
         event.stopPropagation();
@@ -2854,13 +2871,21 @@
 
         if (pickedImage) {
             const file = pickedImage;
-            // Handyfotos (mehrere MB) verkleinern: schnellerer Upload, schnellere KI
-            const small = await shrinkImage(file).catch(() => null);
-            const base64 = small || await toBase64(file);
-            imagePayload = {
-                mime: small ? 'image/jpeg' : (file.type || 'image/jpeg'),
-                data: base64.split(',')[1]
-            };
+            showStatus('Foto wird vorbereitet …', false, false);
+            try {
+                // Handyfotos (mehrere MB) verkleinern: schnellerer Upload, schnellere KI
+                const small = await Promise.race([
+                    shrinkImage(file),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('zu langsam')), 15000))
+                ]).catch(() => null);
+                const base64 = small || await toBase64(file);
+                imagePayload = {
+                    mime: small ? 'image/jpeg' : (file.type || 'image/jpeg'),
+                    data: base64.split(',')[1]
+                };
+            } catch (err) {
+                return showStatus('Das Foto ließ sich nicht lesen (' + err.message + '). Bitte nochmal aufnehmen oder aus der Galerie wählen.', true, false);
+            }
         }
 
         if (!text && !imagePayload) return;
