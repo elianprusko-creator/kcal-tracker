@@ -432,6 +432,9 @@
         .recipe-total:empty { display: none; }
         .remind-row { display: flex; align-items: center; gap: 8px; font-size: 15px; margin: 6px 0; cursor: pointer; }
         .remind-row input[type="checkbox"] { width: 20px; height: 20px; margin: 0; flex-shrink: 0; }
+        .consent-row { display: flex; gap: 10px; align-items: flex-start; margin: 4px 0 12px; font-size: 12.5px; line-height: 1.45; color: var(--mute); cursor: pointer; }
+        .consent-row input { width: 20px; height: 20px; margin: 1px 0 0; flex-shrink: 0; }
+        .consent-row a { color: var(--accent); }
         .remind-row input[type="time"] { width: auto; margin: 0 0 0 auto; padding: 6px; }
         .remind-sub { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 4px; }
         .remind-sub .btn { width: auto; }
@@ -458,8 +461,13 @@
         <p class="sub-text">Melde dich an oder lege ein Konto an.</p>
         <input type="email" id="email-input" placeholder="E-Mail Adresse" autocomplete="email">
         <input type="password" id="password-input" placeholder="Passwort" autocomplete="current-password">
+        <label class="consent-row">
+            <input type="checkbox" id="consent-input">
+            <span>Nur für neue Konten: Ich bin mindestens 18 und willige ein, dass meine Angaben zu Ernährung und Körper (Gesundheitsdaten) wie in der <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutzerklärung</a> beschrieben gespeichert werden. Widerruf jederzeit durch Löschen des Kontos.</span>
+        </label>
         <button class="btn" id="login-btn">Anmelden / Registrieren</button>
         <button class="btn btn-sec" id="forgot-btn" type="button" style="margin-top: 10px;">Passwort vergessen?</button>
+        <p class="sub-text" style="margin: 12px 0 0; font-size: 12px;">Kein Medizinprodukt · <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a></p>
     </div>
 
     <!-- Neues Passwort setzen (nach Link aus der E-Mail) -->
@@ -1009,6 +1017,18 @@
                 <button type="button" class="btn btn-sec" id="export-days-btn">Tagesübersicht</button>
             </div>
         </details>
+
+        <!-- Info, Datenschutz, Konto -->
+        <details class="card" id="account-card">
+            <summary><h3>Info &amp; Konto</h3></summary>
+            <p class="sub-text" style="margin: 8px 0 10px;">Alle Angaben sind Schätzungen. Die App ist kein Medizinprodukt und ersetzt keine ärztliche oder ernährungsfachliche Beratung.</p>
+            <p class="sub-text" style="margin: 0 0 10px;">
+                <a href="datenschutz.html" target="_blank" rel="noopener">Datenschutz</a> ·
+                <a href="datenschutz.html#quellen" target="_blank" rel="noopener">Quellen &amp; Lizenzen</a>
+            </p>
+            <p class="sub-text" style="margin: 0 0 4px;">Nährwerte aus Barcodes stammen von <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">Open Food Facts</a> (Lizenz ODbL).</p>
+            <button type="button" class="link-btn" id="delete-account-btn">Konto und alle Daten löschen…</button>
+        </details>
         </div>
     </div>
 </main>
@@ -1114,7 +1134,7 @@
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script src="vendor/supabase-2.45.4.js"></script>
 <script>
     const SUPABASE_URL = 'https://tzqzgcnacpkzdyvahioo.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M';
@@ -1134,7 +1154,7 @@
     // Herkunft der Nährwerte (entries.source)
     const SOURCE_LABEL = { manual: 'Manuell', tabelle: 'Tabelle', off: 'Open Food Facts', ki: 'KI-Schätzung', ki_suche: 'KI + Suche', ai: 'KI', meal: 'Gericht' };
     const NUTRIENTS = ['kcal', 'protein_g', 'carbs_g', 'fat_g'];
-    const SCANNER_URL = 'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js';
+    const SCANNER_URL = 'vendor/html5-qrcode-2.3.8.min.js';
 
     let currentSession = null;
     let profile = null;
@@ -1385,7 +1405,16 @@
                 if (!confirm('E-Mail oder Passwort falsch.\n\nNoch kein Konto? Dann OK für "neues Konto anlegen".\nSchon ein Konto? Dann Abbrechen und "Passwort vergessen?" nutzen.')) {
                     return;
                 }
-                ({ data, error } = await supabase.auth.signUp({ email, password }));
+                if (!$('consent-input').checked) {
+                    alert('Für ein neues Konto bitte zuerst das Häkchen setzen (mindestens 18 und Einwilligung zur Datenschutzerklärung).');
+                    $('consent-input').focus();
+                    return;
+                }
+                // Einwilligung mit Zeitpunkt und Fassung beim Nutzer festhalten (Nachweis, Art. 7 DSGVO)
+                ({ data, error } = await supabase.auth.signUp({
+                    email, password,
+                    options: { data: { consent_at: new Date().toISOString(), consent_version: '2026-11-25', adult: true } }
+                }));
                 // Supabase meldet bei bereits vergebener E-Mail keinen Fehler, sondern einen Nutzer ohne Identitäten
                 if (!error && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
                     alert('Für diese E-Mail gibt es schon ein Konto. Tippe auf "Passwort vergessen?", um ein neues Passwort zu setzen.');
@@ -1499,6 +1528,39 @@
         $('onboarding').classList.add('hidden');
         $('chat-footer').classList.add('hidden');
         $('auth-card').classList.remove('hidden');
+    });
+
+    // Konto endgültig löschen (Pflicht für den Play Store). Alle Tabellen hängen per Cascade am Nutzer.
+    $('delete-account-btn').addEventListener('click', async () => {
+        if (!currentSession) return;
+        const typed = prompt('Dein Konto und ALLE Daten (Einträge, Gewicht, Rezepte, Pläne, Erinnerungen) werden endgültig gelöscht. Das lässt sich nicht rückgängig machen.\n\nTipp: Vorher unter „Daten exportieren“ sichern.\n\nZum Bestätigen LÖSCHEN eintippen:');
+        if (typed === null) return;
+        if (typed.trim().toUpperCase() !== 'LÖSCHEN' && typed.trim().toUpperCase() !== 'LOESCHEN') {
+            alert('Nicht gelöscht: Bestätigung stimmt nicht.');
+            return;
+        }
+        const btn = $('delete-account-btn');
+        btn.disabled = true;
+        btn.textContent = 'Wird gelöscht…';
+        try {
+            const { data, error } = await supabase.functions.invoke('delete-account', { body: { confirm: 'delete-my-account' } });
+            if (error || !data?.ok) throw new Error(data?.error || error?.message || 'unbekannter Fehler');
+            // Spuren auf diesem Gerät entfernen: Push-Anmeldung und gespeicherte Nutzerdaten
+            try {
+                const reg = await navigator.serviceWorker?.ready;
+                const sub = await reg?.pushManager?.getSubscription();
+                await sub?.unsubscribe();
+            } catch (e) {}
+            const prefix = `kcal:${currentSession.user.id}:`;
+            Object.keys(localStorage).filter(k => k.startsWith(prefix)).forEach(k => localStorage.removeItem(k));
+            await supabase.auth.signOut({ scope: 'local' }).catch(() => {});
+            alert('Dein Konto und alle Daten wurden gelöscht.');
+            location.reload();
+        } catch (err) {
+            alert('Löschen fehlgeschlagen: ' + (isNetworkError(err) ? 'keine Internetverbindung.' : err.message));
+            btn.disabled = false;
+            btn.textContent = 'Konto und alle Daten löschen…';
+        }
     });
 
     async function startApp() {

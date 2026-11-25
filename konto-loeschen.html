@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Konto löschen – Kcal &amp; Protein Tracker</title>
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <style>
+        :root { color-scheme: light dark; --bg: #f3f5f6; --card: #fff; --field: #eef1f3; --text: #14191c; --mute: #5f6d78; --accent: #0b8a67; --border: #dce2e6; --danger: #cf3f3f; }
+        @media (prefers-color-scheme: dark) {
+            :root { --bg: #12181b; --card: #1a2328; --field: #0f1417; --text: #fff; --mute: #8a99a6; --accent: #2ae8b3; --border: #2a373f; --danger: #ff6b6b; }
+        }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        main { max-width: 520px; margin: 0 auto; padding: 24px 18px 60px; }
+        h1 { font-size: 24px; margin: 0 0 8px; }
+        .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin: 16px 0; }
+        label { display: block; font-size: 14px; color: var(--mute); margin: 10px 0 4px; }
+        input { width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--field); color: var(--text); }
+        button { margin-top: 14px; width: 100%; font: inherit; font-weight: 600; padding: 12px; border: 0; border-radius: 10px; background: var(--danger); color: #fff; cursor: pointer; }
+        button:disabled { opacity: .6; cursor: default; }
+        .mute { color: var(--mute); font-size: 14px; }
+        #msg { margin-top: 12px; font-weight: 600; }
+        #msg.err { color: var(--danger); }
+        #msg.ok { color: var(--accent); }
+        a { color: var(--accent); }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Konto löschen</h1>
+    <p>Hier kannst du dein Konto beim <b>Kcal &amp; Protein Tracker</b> mit allen Daten endgültig löschen, auch ohne die App.</p>
+    <p class="mute">
+        Gelöscht werden: Anmeldedaten, Profil und Ziele, alle Einträge, Gewicht, Wasser, Rezepte, Wochenplan,
+        Einkaufsliste, Vorrat und Erinnerungen. Das geschieht sofort und lässt sich nicht rückgängig machen.
+        Es wird nichts aufbewahrt. In der App geht es auch unter „Mehr“ → „Info &amp; Konto“.
+    </p>
+
+    <form class="card" id="form">
+        <label for="email">E-Mail</label>
+        <input id="email" type="email" autocomplete="email" required>
+        <label for="pw">Passwort</label>
+        <input id="pw" type="password" autocomplete="current-password" required>
+        <label for="confirm">Zum Bestätigen <b>LÖSCHEN</b> eintippen</label>
+        <input id="confirm" type="text" autocomplete="off" required>
+        <button type="submit" id="btn">Konto endgültig löschen</button>
+        <div id="msg" role="status"></div>
+    </form>
+
+    <p class="mute">Passwort vergessen? Setze es in der <a href="./">App</a> über „Passwort vergessen?“ zurück und komm dann hierher zurück.
+        Mehr dazu in der <a href="datenschutz.html#konto-loeschen">Datenschutzerklärung</a>.</p>
+</main>
+<script src="vendor/supabase-2.45.4.js"></script>
+<script>
+    const sb = window.supabase.createClient('https://tzqzgcnacpkzdyvahioo.supabase.co', 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M',
+        { auth: { persistSession: false } });
+    const $ = id => document.getElementById(id);
+    const say = (text, cls) => { $('msg').textContent = text; $('msg').className = cls || ''; };
+
+    $('form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const typed = $('confirm').value.trim().toUpperCase();
+        if (typed !== 'LÖSCHEN' && typed !== 'LOESCHEN') return say('Bitte LÖSCHEN eintippen.', 'err');
+        $('btn').disabled = true;
+        say('Wird gelöscht…');
+        try {
+            const { error: loginErr } = await sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('pw').value });
+            if (loginErr) throw new Error('E-Mail oder Passwort falsch.');
+            const { data, error } = await sb.functions.invoke('delete-account', { body: { confirm: 'delete-my-account' } });
+            if (error || !data?.ok) throw new Error(data?.error || 'Löschen ist fehlgeschlagen. Bitte später nochmal versuchen.');
+            await sb.auth.signOut({ scope: 'local' }).catch(() => {});
+            $('form').querySelectorAll('input').forEach(i => { i.value = ''; i.disabled = true; });
+            say('Dein Konto und alle Daten wurden gelöscht.', 'ok');
+        } catch (err) {
+            say(err.message, 'err');
+            $('btn').disabled = false;
+        }
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Datenschutz – Kcal &amp; Protein Tracker</title>
+    <link rel="icon" href="icon.svg" type="image/svg+xml">
+    <style>
+        :root { color-scheme: light dark; --bg: #f3f5f6; --card: #fff; --text: #14191c; --mute: #5f6d78; --accent: #0b8a67; --border: #dce2e6; --warn: #fff4e5; }
+        @media (prefers-color-scheme: dark) {
+            :root { --bg: #12181b; --card: #1a2328; --text: #fff; --mute: #8a99a6; --accent: #2ae8b3; --border: #2a373f; --warn: #3a2c18; }
+        }
+        body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+        main { max-width: 720px; margin: 0 auto; padding: 24px 18px 60px; }
+        h1 { font-size: 26px; margin: 0 0 4px; }
+        h2 { font-size: 19px; margin: 32px 0 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+        h3 { font-size: 16px; margin: 18px 0 4px; }
+        p, li { color: var(--text); }
+        .mute { color: var(--mute); font-size: 14px; }
+        a { color: var(--accent); }
+        ul { padding-left: 20px; }
+        .todo { background: var(--warn); border-radius: 8px; padding: 2px 6px; }
+        .box { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
+        table { border-collapse: collapse; width: 100%; font-size: 14px; }
+        td, th { text-align: left; border-bottom: 1px solid var(--border); padding: 6px 8px 6px 0; vertical-align: top; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Datenschutzerklärung</h1>
+    <p class="mute">Kcal &amp; Protein Tracker · Stand: 25.11.2026</p>
+
+    <div class="box">
+        <b>Kurz gesagt:</b> Deine Daten liegen auf einem Server in der EU (Irland) und gehören dir. Es gibt keine Werbung,
+        kein Tracking und keinen Verkauf von Daten. Die KI-Funktion ist freiwillig und nur aktiv, wenn du selbst einen
+        Schlüssel einträgst. Du kannst alles jederzeit exportieren und dein Konto selbst löschen.
+    </div>
+
+    <h2>1. Verantwortlicher</h2>
+    <p>
+        <span class="todo">[Vor- und Nachname]</span><br>
+        <span class="todo">[Straße, Hausnummer, PLZ Ort]</span><br>
+        E-Mail: <span class="todo">[Kontakt-E-Mail]</span>
+    </p>
+
+    <h2>2. Welche Daten verarbeitet werden</h2>
+    <table>
+        <tr><th>Daten</th><th>Wozu</th></tr>
+        <tr><td>E-Mail-Adresse, Passwort (nur verschlüsselt als Hash)</td><td>Anmeldung, Passwort zurücksetzen</td></tr>
+        <tr><td>Körperdaten: Gewicht, Größe, Alter, Geschlecht, Aktivität, Ziel</td><td>Berechnung deines Kalorien- und Eiweißziels</td></tr>
+        <tr><td>Mahlzeiten-Einträge (Name, Menge, Kalorien, Makronährstoffe, Uhrzeit/Mahlzeit), Wasser, Gewichtsverlauf</td><td>Das Tagebuch selbst, Auswertungen und Verlauf</td></tr>
+        <tr><td>Rezepte, Wochenplan, Einkaufsliste, Vorrat, Reste, Vorlieben</td><td>Küchen-Funktionen</td></tr>
+        <tr><td>Erinnerungszeiten und Push-Anmeldung deines Geräts</td><td>Erinnerungen, nur wenn du sie einschaltest</td></tr>
+    </table>
+    <p>
+        Angaben zu Ernährung und Körpergewicht können als <b>Gesundheitsdaten</b> gelten (Art. 9 DSGVO). Wir verarbeiten sie
+        nur, weil und soweit du sie selbst einträgst, auf Grundlage deiner <b>ausdrücklichen Einwilligung</b>
+        (Art. 9 Abs. 2 lit. a, Art. 6 Abs. 1 lit. a DSGVO). Die übrigen Daten verarbeiten wir zur Bereitstellung der App
+        (Art. 6 Abs. 1 lit. b DSGVO). Du kannst die Einwilligung jederzeit widerrufen, indem du dein Konto löschst.
+    </p>
+
+    <h3>Nur auf deinem Gerät</h3>
+    <p>
+        Eine Offline-Kopie deiner Daten, dein Gemini-API-Schlüssel, das „Teller vorher“-Foto und die Design-Einstellung
+        werden nur im Speicher deines Browsers bzw. Handys abgelegt und nicht an uns übertragen.
+        Fotos werden nicht auf unserem Server gespeichert.
+    </p>
+
+    <h2>3. Dienstleister und Empfänger</h2>
+    <h3>Supabase (Datenbank, Anmeldung, Server-Funktionen)</h3>
+    <p>
+        Supabase Inc. betreibt für uns Datenbank und Anmeldung. Die Daten liegen in einem Rechenzentrum in der EU
+        (AWS, Region Irland). Mit Supabase besteht ein Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO). <span class="todo">[DPA im Supabase-Dashboard anfordern und unterschreiben]</span>
+        Jeder Nutzer kann technisch nur auf seine eigenen Daten zugreifen.
+    </p>
+    <h3>Google Gemini (KI-Schätzung, freiwillig)</h3>
+    <p>
+        Nur wenn du in der App selbst einen Gemini-API-Schlüssel einträgst und die KI-Funktion nutzt, werden dein
+        eingegebener Text bzw. dein Foto (und für Essensideen deine Tageswerte und Vorlieben) über unseren Server an
+        Google Ireland Ltd. / Google LLC geschickt. Die Anfrage läuft über <b>dein</b> Google-Konto und unterliegt den
+        Bedingungen von Google. <b>Im kostenlosen Tarif darf Google die Eingaben zur Verbesserung seiner Dienste nutzen,
+        und Menschen können sie prüfen.</b> Dabei kann es zu einer Übermittlung in die USA kommen
+        (Google ist unter dem EU-US Data Privacy Framework zertifiziert). Ohne Schlüssel findet keine Übertragung an Google statt.
+    </p>
+    <h3>Open Food Facts (Barcode und Produktsuche)</h3>
+    <p>
+        Beim Scannen eines Barcodes oder bei der Produktsuche wird der Barcode bzw. Suchbegriff direkt von deinem Gerät
+        an Open Food Facts (gemeinnütziger Verein, Frankreich) gesendet. Dabei wird deine IP-Adresse übertragen,
+        aber keine Kontodaten.
+    </p>
+    <h3>Hosting der App (GitHub Pages)</h3>
+    <p>
+        Die App-Dateien werden über GitHub Pages (GitHub Inc., USA) ausgeliefert. Dabei verarbeitet GitHub technisch
+        notwendig deine IP-Adresse (Server-Logs). Rechtsgrundlage: berechtigtes Interesse an einer funktionierenden
+        Auslieferung (Art. 6 Abs. 1 lit. f DSGVO).
+    </p>
+    <h3>Push-Dienst deines Browsers</h3>
+    <p>
+        Erinnerungen werden über den Push-Dienst deines Browsers zugestellt (bei Chrome/Android: Google Firebase Cloud
+        Messaging). Der Inhalt einer Erinnerung ist ein kurzer Text wie „Zeit fürs Mittagessen“.
+    </p>
+
+    <h2>4. Kein Tracking, keine Werbung</h2>
+    <p>Die App verwendet keine Analyse- oder Werbe-Tools, keine Tracking-Cookies und verkauft keine Daten.</p>
+
+    <h2>5. Wie lange Daten gespeichert werden</h2>
+    <p>
+        Solange dein Konto besteht. Löschst du einzelne Einträge, sind sie sofort weg. Löschst du dein Konto, werden
+        alle zugehörigen Daten sofort und endgültig entfernt; Sicherungskopien des Anbieters werden turnusmäßig
+        überschrieben.
+    </p>
+
+    <h2 id="konto-loeschen">6. Deine Rechte und Konto löschen</h2>
+    <ul>
+        <li><b>Export:</b> In der App unter „Mehr“ → „Daten exportieren“ (CSV).</li>
+        <li><b>Konto löschen:</b> In der App unter „Mehr“ → „Info &amp; Konto“ → „Konto und alle Daten löschen“, oder ohne App über
+            <a href="konto-loeschen.html">diese Seite</a>.</li>
+        <li>Du hast außerdem das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung, Datenübertragbarkeit,
+            Widerspruch und Widerruf deiner Einwilligung. Schreib dafür an die oben genannte E-Mail-Adresse.</li>
+        <li>Du kannst dich bei einer Datenschutz-Aufsichtsbehörde beschweren, z. B. der deines Wohnorts.</li>
+    </ul>
+
+    <h2>7. Kein Medizinprodukt</h2>
+    <p>
+        Alle Nährwerte und Ziele sind Schätzungen. Die App ersetzt keine ärztliche oder ernährungsfachliche Beratung.
+        Bei Vorerkrankungen, Schwangerschaft oder einer (früheren) Essstörung sprich bitte vorher mit einer Fachperson.
+        Die App richtet sich an Personen ab 18 Jahren.
+    </p>
+
+    <h2 id="quellen">8. Quellen &amp; Lizenzen</h2>
+    <ul>
+        <li><b>Open Food Facts</b>: Produktdaten unter der
+            <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License (ODbL)</a>,
+            Inhalte unter <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA</a>.
+            © Open Food Facts contributors, <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">openfoodfacts.org</a>.</li>
+        <li><b>supabase-js</b>: MIT-Lizenz, © Supabase.</li>
+        <li><b>html5-qrcode</b>: Apache License 2.0, © Minhaz.</li>
+    </ul>
+
+    <p class="mute" style="margin-top: 40px;"><a href="./">← Zur App</a></p>
+</main>
+</body>
+</html>

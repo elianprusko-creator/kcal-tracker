@@ -1,19 +1,17 @@
 // Offline-Modus: App-Dateien zwischenspeichern, damit die App auch ohne Netz startet.
 // Daten (Supabase, Open Food Facts, KI) laufen NICHT über diesen Cache.
 // Nach Änderungen an dieser Datei die Versionsnummer erhöhen.
-const CACHE = 'kcal-v5';
-const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
-const CDN = [
-    'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
-    'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js'
-];
+const CACHE = 'kcal-v6';
+const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
+    './vendor/supabase-2.45.4.js'];
+// Nur für Scanner bzw. Info nötig: ein Fehler hier darf die Installation nicht abbrechen
+const OPTIONAL = ['./vendor/html5-qrcode-2.3.8.min.js', './datenschutz.html'];
 
 self.addEventListener('install', (event) => {
     event.waitUntil((async () => {
         const cache = await caches.open(CACHE);
         await cache.addAll(LOCAL);
-        // CDN-Dateien sind nice-to-have: ein Fehler hier darf die Installation nicht abbrechen
-        await Promise.all(CDN.map(url => cache.add(url).catch(() => {})));
+        await Promise.all(OPTIONAL.map(url => cache.add(url).catch(() => {})));
         await self.skipWaiting();
     })());
 });
@@ -67,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Icons, Manifest und Bibliotheken: sofort aus dem Cache, im Hintergrund aktualisieren
-    const isStatic = (url.origin === self.location.origin && !url.pathname.endsWith('sw.js')) || CDN.includes(req.url);
+    const isStatic = (url.origin === self.location.origin && !url.pathname.endsWith('sw.js')) ;
     if (!isStatic) return;
     event.respondWith((async () => {
         const cache = await caches.open(CACHE);

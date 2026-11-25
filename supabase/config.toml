@@ -418,6 +418,10 @@ enabled = true
 # Nur eingeloggte Nutzer dürfen die KI aufrufen
 verify_jwt = true
 
+[functions.delete-account]
+# Prüft das Login selbst und löscht nur den eigenen Nutzer
+verify_jwt = false
+
 [functions.remind]
 # Wird von pg_cron ohne Login aufgerufen (sendet nur, was ohnehin fällig ist); Test-Modus prüft das Login selbst
 verify_jwt = false
