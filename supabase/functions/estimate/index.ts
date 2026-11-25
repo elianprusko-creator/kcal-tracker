@@ -290,6 +290,142 @@ async function menu(req: AdviceReq, key: string | null) {
   };
 }
 
+// ---------- Teller vorher/nachher ----------
+
+const PLATE_PROMPT = `Du bist ein präziser Ernährungsassistent. Bild 1 zeigt einen Teller VOR dem Essen.
+Bild 2 (falls vorhanden) zeigt, was NACH dem Essen übrig ist; ohne Bild 2 wurde alles aufgegessen.
+Erkenne jedes Lebensmittel auf dem vollen Teller und schätze seine Menge in Gramm (sichtbares Öl/Soße einrechnen).
+Schätze dann aus Bild 2 je Lebensmittel, welcher Anteil übrig ist. Gib NUR die GEGESSENE Menge zurück
+(gegessen = Menge auf Bild 1 minus Rest auf Bild 2). In note kurz die Rechnung, z. B. "ca. 300 g Nudeln, ein Viertel übrig".
+Felder pro Eintrag: name, grams (gegessen), amount (kurzer Text), kcal, protein_g, carbs_g, fat_g (für die gegessene Menge),
+confidence ("hoch"|"mittel"|"niedrig"), note.
+Antwort als JSON: {"items":[{"name":"","amount":"","grams":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0,"confidence":"","note":""}]}`;
+
+type Img = { mime: string; data: string };
+
+async function plate(req: { before?: Img; after?: Img | null; text?: string }, key: string | null) {
+  if (!req.before?.data) throw new Error("Das Vorher-Foto fehlt.");
+  const parts: unknown[] = [
+    { text: `${PLATE_PROMPT}${req.text ? `\n\nHinweis der Person: ${req.text}` : ""}` },
+    { inline_data: { mime_type: req.before.mime || "image/jpeg", data: req.before.data } },
+  ];
+  if (req.after?.data) parts.push({ inline_data: { mime_type: req.after.mime || "image/jpeg", data: req.after.data } });
+  const res = await gemini(parts, { key, timeoutMs: 35000, budgetMs: 70000 });
+  const items = (Array.isArray(res.json.items) ? res.json.items : []) as AiItem[];
+  return { items: items.map((a) => ({ ...fromAi(a, "ki"), note: [a.note, "Teller vorher/nachher"].filter(Boolean).join(" · ") })) };
+}
+
+// ---------- Rezept übernehmen (geteilter Link, YouTube, Text, Screenshot) ----------
+
+const RECIPE_PROMPT = `Extrahiere das Rezept. Felder:
+- name: kurzer deutscher Name des Gerichts
+- servings: Anzahl Portionen laut Rezept (sonst realistisch schätzen)
+- ingredients: jede Zutat mit Menge in Gramm, roh wie eingekauft (Stück, EL, Dosen usw. in g umrechnen),
+  und Nährwerten FÜR DIESE MENGE: kcal, protein_g, carbs_g, fat_g. Gewürze und Wasser weglassen, Öl und Soßen mitnehmen.
+- note: kurz, was du geschätzt hast
+Ist kein Rezept erkennbar, setze found auf false.
+Antwort als JSON: {"found":true,"name":"","servings":0,"ingredients":[{"name":"","grams":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}],"note":""}`;
+
+function youtubeUrl(u: URL): string | null {
+  const host = u.hostname.replace(/^www\.|^m\./, "");
+  let id = "";
+  if (host === "youtu.be") id = u.pathname.slice(1);
+  else if (host === "youtube.com" || host === "music.youtube.com") {
+    id = u.searchParams.get("v") || (u.pathname.match(/^\/(?:shorts|embed|live)\/([\w-]+)/)?.[1] ?? "");
+  }
+  return /^[\w-]{6,20}$/.test(id) ? `https://www.youtube.com/watch?v=${id}` : null;
+}
+
+// Nur öffentliche Webseiten abrufen (keine internen Adressen)
+function safeUrl(raw: string): URL | null {
+  try {
+    const u = new URL(raw);
+    if (!/^https?:$/.test(u.protocol)) return null;
+    const h = u.hostname.toLowerCase();
+    if (h === "localhost" || h.endsWith(".local") || h.endsWith(".internal") || /^\[/.test(h)) return null;
+    if (/^(127\.|10\.|0\.|169\.254\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return null;
+    return u;
+  } catch {
+    return null;
+  }
+}
+
+// schema.org/Recipe aus JSON-LD (Chefkoch, Lecker, viele Blogs)
+// deno-lint-ignore no-explicit-any
+function findRecipeLd(html: string): any | null {
+  for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try {
+      const data = JSON.parse(m[1].trim());
+      // deno-lint-ignore no-explicit-any
+      const stack: any[] = [data];
+      while (stack.length) {
+        const x = stack.pop();
+        if (!x || typeof x !== "object") continue;
+        if (Array.isArray(x)) { stack.push(...x); continue; }
+        const t = x["@type"];
+        if (t === "Recipe" || (Array.isArray(t) && t.includes("Recipe"))) return x;
+        if (x["@graph"]) stack.push(x["@graph"]);
+      }
+    } catch { /* kaputtes JSON-LD überspringen */ }
+  }
+  return null;
+}
+
+function htmlText(html: string) {
+  return html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim().slice(0, 14000);
+}
+
+async function recipeImport(req: { url?: string; text?: string; image?: Img }, key: string | null) {
+  let parts: unknown[] = [];
+  let source = "";
+  const raw = (req.url || req.text?.match(/https?:\/\/\S+/)?.[0] || "").trim();
+  const u = raw ? safeUrl(raw) : null;
+  const yt = u ? youtubeUrl(u) : null;
+
+  if (yt) {
+    // Gemini kann öffentliche YouTube-Videos direkt ansehen
+    parts = [{ file_data: { file_uri: yt } }, { text: `${RECIPE_PROMPT}\n\nDas Rezept steht im Video (gesprochen, eingeblendet oder in der Beschreibung).` }];
+    source = "YouTube";
+  } else if (u && !/tiktok\.com|instagram\.com|facebook\.com/.test(u.hostname)) {
+    const r = await fetch(u, {
+      headers: { "User-Agent": "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/131 Mobile Safari/537.36", "Accept-Language": "de-DE,de" },
+      signal: AbortSignal.timeout(10000), redirect: "follow",
+    }).catch(() => null);
+    if (!r || !r.ok) throw new Error("Die Seite ließ sich nicht öffnen. Mach stattdessen einen Screenshot vom Rezept und teile den.");
+    const html = (await r.text()).slice(0, 1_500_000);
+    const ld = findRecipeLd(html);
+    const info = ld
+      ? `Rezept (strukturiert): ${JSON.stringify({ name: ld.name, recipeYield: ld.recipeYield, recipeIngredient: ld.recipeIngredient })}`
+      : `Text der Webseite: ${htmlText(html)}`;
+    parts = [{ text: `${RECIPE_PROMPT}\n\n${info}` }];
+    source = u.hostname.replace(/^www\./, "");
+  } else if (req.image?.data) {
+    parts = [{ text: `${RECIPE_PROMPT}\n\nDas Rezept steht auf dem Bild (z. B. Screenshot einer Videobeschreibung).${req.text ? `\nZusätzlicher Text: ${req.text}` : ""}` },
+      { inline_data: { mime_type: req.image.mime || "image/jpeg", data: req.image.data } }];
+    source = "Bild";
+  } else if (req.text && req.text.replace(/https?:\/\/\S+/g, "").trim().length > 20) {
+    parts = [{ text: `${RECIPE_PROMPT}\n\nText: ${req.text.slice(0, 8000)}` }];
+    source = "Text";
+  } else {
+    throw new Error(u
+      ? "Bei TikTok und Instagram kommt die App nicht an das Video. Mach einen Screenshot vom Rezept (z. B. aus der Beschreibung) und teile den."
+      : "Kein Rezept gefunden.");
+  }
+
+  const res = await gemini(parts, { key, timeoutMs: yt ? 60000 : 30000, budgetMs: yt ? 85000 : 60000, tries: yt ? 2 : undefined });
+  const j = res.json;
+  const ingredients = (Array.isArray(j.ingredients) ? j.ingredients : []).map((i: Record<string, unknown>) => ({
+    name: String(i?.name || "").slice(0, 80), grams: r1(i?.grams), kcal: Math.round(Number(i?.kcal) || 0),
+    protein_g: r1(i?.protein_g), carbs_g: r1(i?.carbs_g), fat_g: r1(i?.fat_g),
+  })).filter((i: { name: string }) => i.name);
+  if (j.found === false || !ingredients.length) throw new Error("Darin war kein Rezept zu erkennen.");
+  return {
+    recipe: { name: String(j.name || "Rezept").slice(0, 120), servings: Math.min(50, Math.max(1, Math.round(Number(j.servings) || 2))), ingredients, note: String(j.note || "").slice(0, 200) },
+    source,
+  };
+}
+
 // ---------- Barcode-Produkte ----------
 
 const PORTION_RULES = `Mengen-Auswahl (portions): 3–5 sinnvolle Mengen, wie man genau dieses Produkt typischerweise isst/trinkt,
@@ -474,6 +610,8 @@ Deno.serve(async (req) => {
     if (body.product) return out({ ...(await product(body.product, key)), ms: Date.now() - started });
     if (body.suggest) return out({ ...(await suggest(body.suggest, key)), ms: Date.now() - started });
     if (body.menu) return out({ ...(await menu(body.menu, key)), ms: Date.now() - started });
+    if (body.plate) return out({ ...(await plate(body.plate, key)), ai_calls: 1, ms: Date.now() - started });
+    if (body.recipe_import) return out({ ...(await recipeImport(body.recipe_import, key)), ms: Date.now() - started });
     const { text, image } = body;
     if (!text && !image) return out({ error: "Leere Eingabe." });
 

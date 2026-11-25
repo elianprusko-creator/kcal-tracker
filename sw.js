@@ -1,7 +1,7 @@
 // Offline-Modus: App-Dateien zwischenspeichern, damit die App auch ohne Netz startet.
 // Daten (Supabase, Open Food Facts, KI) laufen NICHT über diesen Cache.
 // Nach Änderungen an dieser Datei die Versionsnummer erhöhen.
-const CACHE = 'kcal-v3';
+const CACHE = 'kcal-v4';
 const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png'];
 const CDN = [
     'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js',
@@ -21,13 +21,31 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
     event.waitUntil((async () => {
         const keys = await caches.keys();
-        await Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)));
+        await Promise.all(keys.filter(k => k !== CACHE && k !== 'share-inbox').map(k => caches.delete(k)));
         await self.clients.claim();
     })());
 });
 
 self.addEventListener('fetch', (event) => {
     const req = event.request;
+
+    // Geteilt aus einer anderen App (Android "Teilen"): Inhalt kurz ablegen, dann die App öffnen
+    if (req.method === 'POST' && new URL(req.url).pathname.endsWith('/share-target')) {
+        event.respondWith((async () => {
+            try {
+                const form = await req.formData();
+                const inbox = await caches.open('share-inbox');
+                await inbox.put('./share-inbox/data', new Response(JSON.stringify({
+                    title: form.get('title') || '', text: form.get('text') || '', url: form.get('url') || '', at: Date.now()
+                }), { headers: { 'Content-Type': 'application/json' } }));
+                const file = form.get('image');
+                if (file && file.size) await inbox.put('./share-inbox/image', new Response(file, { headers: { 'Content-Type': file.type || 'image/jpeg' } }));
+                else await inbox.delete('./share-inbox/image');
+            } catch (e) { /* trotzdem öffnen */ }
+            return Response.redirect('./?share=1', 303);
+        })());
+        return;
+    }
     if (req.method !== 'GET') return;
     const url = new URL(req.url);
 

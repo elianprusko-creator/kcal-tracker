@@ -355,6 +355,10 @@
         .send-btn.mic { font-size: 18px; padding: 10px 16px; }
         .send-btn.listening { background: var(--danger); animation: pulse 1s ease-in-out infinite; }
         @keyframes pulse { 50% { opacity: 0.6; } }
+        .plate-row { display: flex; gap: 12px; align-items: center; }
+        .plate-row img { width: 64px; height: 64px; object-fit: cover; border-radius: 10px; flex-shrink: 0; }
+        .share-what { background: var(--field); border-radius: 10px; padding: 10px 12px; margin: 10px 0 12px; font-size: 14px; overflow-wrap: anywhere; }
+        .share-what img { max-width: 100%; max-height: 220px; border-radius: 8px; display: block; margin-top: 6px; }
         /* Reiter */
         .tabs { display: flex; gap: 4px; background: var(--field); border-radius: 10px; padding: 4px; position: sticky; top: 0; z-index: 50; }
         .tabs button { flex: 1; background: none; border: none; color: var(--mute); padding: 8px 4px; font: inherit; font-size: 14px;
@@ -431,6 +435,10 @@
         .remind-row input[type="time"] { width: auto; margin: 0 0 0 auto; padding: 6px; }
         .remind-sub { display: flex; justify-content: space-between; align-items: center; margin: 16px 0 4px; }
         .remind-sub .btn { width: auto; }
+        .wake-setup { background: var(--field); border-radius: 10px; padding: 10px 12px; font-size: 13px; }
+        .wake-setup p { margin: 4px 0 8px; color: var(--mute); }
+        .wake-setup ol { margin: 0 0 8px; padding-left: 18px; }
+        .wake-setup li { margin: 3px 0; }
         .attach-menu { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 10px; overflow: hidden;
             margin-bottom: 8px; background: var(--card); max-width: 260px; }
         .attach-menu.hidden { display: none; }
@@ -573,6 +581,22 @@
 
         <!-- Schnell eintragen -->
         <button type="button" class="btn btn-sec ideas-btn ai-only" id="ideas-btn">💡 Was soll ich jetzt essen?</button>
+
+        <!-- Teller vorher/nachher: Vorher-Foto wartet auf das Nachher-Foto -->
+        <div class="card tip-card hidden ai-only" id="plate-card">
+            <div class="plate-row">
+                <img id="plate-thumb" alt="Teller vorher">
+                <div>
+                    <b>🍽️ Guten Appetit!</b>
+                    <p class="preview-note" style="margin: 4px 0 0;">Nach dem Essen den Rest fotografieren – die App rechnet aus, wie viel du gegessen hast.</p>
+                </div>
+            </div>
+            <div class="row" style="margin-top: 10px;">
+                <label for="plate-input" class="btn btn-small" style="text-align: center;">Rest fotografieren</label>
+                <button type="button" class="btn btn-small btn-sec" id="plate-all-btn">Alles aufgegessen</button>
+            </div>
+            <button type="button" class="link-btn" id="plate-drop-btn">Verwerfen</button>
+        </div>
 
         <!-- Ziel, das mitlernt: Hinweis, wenn eine Anpassung empfohlen wird -->
         <div class="card tip-card hidden" id="adapt-tip-card">
@@ -949,6 +973,25 @@
                 </label>
                 <p class="preview-note" style="margin: 4px 0 0;">Nur wenn du hinter deinem Wasserziel liegst. Essens-Erinnerungen fallen weg, wenn du die Mahlzeit schon eingetragen hast.</p>
 
+                <div class="remind-sub">
+                    <b>Aufwachen</b>
+                    <button type="button" class="btn btn-small btn-sec" id="wake-now-btn">☀️ Bin wach</button>
+                </div>
+                <p class="preview-note" id="wake-status" style="margin: 0 0 6px;">Später oder früher aufgestanden? „Bin wach“ verschiebt die Essenszeiten für heute. Geht auch per langem Druck aufs App-Symbol.</p>
+                <label class="remind-row"><input type="checkbox" id="wake-auto"> Automatisch erkennen (Android)</label>
+                <div id="wake-setup" class="hidden wake-setup">
+                    <p>Mit der App <b>Tasker</b> oder <b>Automate</b> meldet dein Handy morgens von selbst „bin wach“:</p>
+                    <ol>
+                        <li><b>Auslöser:</b> „Wecker beendet“ – oder „Display entsperrt“, eingeschränkt auf 4–12 Uhr.</li>
+                        <li><b>Aktion:</b> „HTTP-Anfrage“ (Methode GET) an diese Adresse:</li>
+                    </ol>
+                    <div class="row" style="align-items: center;">
+                        <input type="text" id="wake-url" readonly style="margin: 0; font-size: 12px;">
+                        <button type="button" class="btn btn-small" id="wake-copy-btn" style="flex: 0 0 auto;">Kopieren</button>
+                    </div>
+                    <p>Nur das erste Signal zwischen 3 und 14 Uhr zählt – Schlummern oder späteres Entsperren ändern nichts. Die Adresse ist dein persönlicher Schlüssel: nicht weitergeben. Ausschalten macht sie ungültig.</p>
+                </div>
+
                 <div class="row" style="margin-top: 14px;">
                     <button type="button" class="btn" id="remind-save-btn">Speichern</button>
                     <button type="button" class="btn btn-sec" id="remind-test-btn">Test senden</button>
@@ -989,6 +1032,22 @@
             <label for="menu-input" class="btn btn-sec" style="text-align: center;">📋 Speisekarte</label>
         </div>
         <div id="ideas-results"></div>
+    </div>
+</div>
+
+<!-- Geteilt aus einer anderen App -->
+<div class="sheet hidden" id="share-sheet" role="dialog" aria-modal="true" aria-labelledby="share-title">
+    <div class="sheet-box card">
+        <div class="card-head">
+            <h3 id="share-title" style="margin: 0;">📥 Geteilt</h3>
+            <button class="icon-btn" id="share-close-btn" title="Schließen">✕</button>
+        </div>
+        <div class="share-what" id="share-what"></div>
+        <div id="share-actions">
+            <button type="button" class="btn" id="share-recipe-btn">🍳 Als Rezept übernehmen</button>
+            <button type="button" class="btn btn-sec" id="share-eat-btn" style="margin-top: 8px;">🍽️ Als gegessen eintragen</button>
+        </div>
+        <p class="preview-note" id="share-hint" style="margin: 10px 0 0;"></p>
     </div>
 </div>
 
@@ -1034,6 +1093,7 @@
             <label for="camera-input">📷 Foto aufnehmen</label>
             <label for="image-input">🖼️ Aus Galerie wählen</label>
             <label for="menu-input">📋 Speisekarte checken</label>
+            <label for="plate-input" id="plate-menu-label">🍽️ Teller vorher/nachher</label>
             <button type="button" class="hidden" id="photo-remove-btn">✕ Foto entfernen</button>
         </div>
         <div class="chat-container">
@@ -1041,6 +1101,7 @@
             <input type="file" id="camera-input" accept="image/*" capture="environment" class="hidden">
             <input type="file" id="image-input" accept="image/*" class="hidden">
             <input type="file" id="menu-input" accept="image/*" capture="environment" class="hidden">
+            <input type="file" id="plate-input" accept="image/*" capture="environment" class="hidden">
             <button class="btn photo-btn" id="scan-btn" title="Barcode scannen" aria-label="Barcode scannen">
                 <svg width="20" height="18" viewBox="0 0 20 18" fill="currentColor" aria-hidden="true">
                     <rect x="0" y="0" width="2" height="18"/><rect x="4" y="0" width="1" height="18"/><rect x="7" y="0" width="3" height="18"/>
@@ -1618,6 +1679,15 @@
         showView('today');
         loadDay();
         loadWeights().then(refreshAdaptive);
+        renderPlate();
+        if (/[?&]wach=1/.test(location.search)) {
+            history.replaceState(null, '', location.pathname);
+            setTimeout(() => sendWakeNow(), 400);
+        }
+        if (/[?&]share=1/.test(location.search)) {
+            history.replaceState(null, '', location.pathname);
+            setTimeout(checkShareInbox, 500);
+        }
         if (/[?&]rueckblick=1/.test(location.search)) {
             history.replaceState(null, '', location.pathname);
             setTimeout(() => { showView('progress'); $('weekly-card').scrollIntoView({ behavior: 'smooth' }); }, 600);
@@ -2692,7 +2762,7 @@
         $('status-card').classList.add('hidden');
     }
 
-    async function analyze(payload) {
+    async function analyze(payload, onSuccess) {
         const seq = ++analyzeSeq;
         lastPayload = payload;
         hidePreview();
@@ -2727,6 +2797,7 @@
             showStatus('Keine Lebensmittel erkannt. Formuliere es etwas genauer.', true);
         } else {
             hideStatus();
+            if (onSuccess) onSuccess();
             showPreview(result.items, result.sources || [], { ...result, allowMeal: true, text: payload.text });
         }
     }
@@ -5223,6 +5294,150 @@
         }
     });
 
+    // ---------- Teller vorher/nachher ----------
+    // Vorher-Foto wird (verkleinert) auf dem Gerät gemerkt, bis das Nachher-Foto kommt.
+
+    const plateKey = () => userKey('plateBefore');
+
+    function renderPlate() {
+        const p = currentSession ? readStore(plateKey(), null) : null;
+        // älter als 6 Stunden -> vergessen
+        const fresh = p && Date.now() - p.at < 6 * 3600 * 1000;
+        if (p && !fresh) localStorage.removeItem(plateKey());
+        $('plate-card').classList.toggle('hidden', !fresh);
+        if (fresh) $('plate-thumb').src = p.dataUrl;
+        $('plate-menu-label').innerText = fresh ? '🍽️ Rest auf dem Teller fotografieren' : '🍽️ Teller vorher/nachher';
+    }
+
+    async function photoPayload(file, side = 1280) {
+        const small = await shrinkImage(file, side, 0.8).catch(() => null);
+        const url = small || await toBase64(file);
+        return { url, img: { mime: small ? 'image/jpeg' : (file.type || 'image/jpeg'), data: url.split(',')[1] } };
+    }
+
+    async function sendPlate(after) {
+        const p = readStore(plateKey(), null);
+        if (!p) return;
+        const before = { mime: 'image/jpeg', data: p.dataUrl.split(',')[1] };
+        const text = $('food-input').value.trim();
+        await analyze({ plate: { before, after, text } }, () => {
+            localStorage.removeItem(plateKey());
+            renderPlate();
+        });
+    }
+
+    $('plate-input').addEventListener('change', async () => {
+        const file = $('plate-input').files[0];
+        $('plate-input').value = '';
+        $('attach-menu').classList.add('hidden');
+        if (!file) return;
+        if (readStore(plateKey(), null) && !$('plate-card').classList.contains('hidden')) {
+            const { img } = await photoPayload(file);
+            return sendPlate(img);
+        }
+        // Vorher-Foto: kleiner speichern (localStorage hat wenig Platz)
+        const { url } = await photoPayload(file, 900);
+        writeStore(plateKey(), { dataUrl: url, at: Date.now() });
+        renderPlate();
+        showView('today');
+        $('plate-card').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+    $('plate-all-btn').addEventListener('click', () => sendPlate(null));
+    $('plate-drop-btn').addEventListener('click', () => { localStorage.removeItem(plateKey()); renderPlate(); });
+
+    // ---------- Geteilt aus anderen Apps (Android "Teilen") ----------
+
+    let shared = null;   // { title, text, url, file }
+
+    async function checkShareInbox() {
+        if (!('caches' in window)) return;
+        const inbox = await caches.open('share-inbox');
+        const res = await inbox.match('./share-inbox/data');
+        if (!res) return;
+        const data = await res.json();
+        const img = await inbox.match('./share-inbox/image');
+        const file = img ? new File([await img.blob()], 'geteilt.jpg', { type: img.headers.get('Content-Type') || 'image/jpeg' }) : null;
+        await inbox.delete('./share-inbox/data');
+        await inbox.delete('./share-inbox/image');
+        if (Date.now() - (data.at || 0) > 10 * 60 * 1000) return; // zu alt
+        shared = { ...data, file };
+        openShare();
+    }
+
+    function sharedUrl() {
+        return shared.url || (shared.text.match(/https?:\/\/\S+/) || [''])[0];
+    }
+
+    function openShare() {
+        const url = sharedUrl();
+        const text = [shared.title, shared.text].filter(Boolean).join(' – ').replace(url, '').trim();
+        $('share-what').innerHTML = [
+            url ? `🔗 ${esc(url)}` : '',
+            text ? `<div class="sub-text" style="margin-top: 4px;">${esc(text.slice(0, 300))}</div>` : '',
+            shared.file ? `<img src="${URL.createObjectURL(shared.file)}" alt="Geteiltes Bild">` : ''
+        ].filter(Boolean).join('');
+        const ai = hasAi();
+        $('share-actions').classList.toggle('hidden', !ai);
+        $('share-hint').innerHTML = !ai
+            ? 'Geteilte Rezepte, Links und Fotos auswerten geht nur mit KI-Schlüssel. <button type="button" class="link-btn accent" id="share-unlock">KI freischalten</button>'
+            : /tiktok|instagram/.test(url)
+                ? 'TikTok und Instagram lassen niemanden an die Videos. Teile stattdessen einen Screenshot vom Rezept (z. B. aus der Beschreibung).'
+                : /youtu/.test(url) ? 'YouTube: Die KI schaut sich das Video an – das dauert bis zu einer Minute.' : '';
+        $('share-sheet').classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closeShare() {
+        $('share-sheet').classList.add('hidden');
+        document.body.style.overflow = '';
+    }
+
+    $('share-close-btn').addEventListener('click', closeShare);
+    $('share-sheet').addEventListener('click', (e) => {
+        if (e.target === $('share-sheet')) closeShare();
+        if (e.target.id === 'share-unlock') { closeShare(); openAiCard(); }
+    });
+
+    $('share-recipe-btn').addEventListener('click', async () => {
+        const btn = $('share-recipe-btn');
+        btn.disabled = true;
+        btn.innerText = 'Lese das Rezept …';
+        try {
+            const payload = { url: sharedUrl(), text: [shared.title, shared.text].filter(Boolean).join('\n') };
+            if (shared.file) payload.image = (await photoPayload(shared.file, 1600)).img;
+            const data = await invokeWithRetry({ recipe_import: payload }, () => { btn.innerText = 'KI ausgelastet, neuer Versuch …'; });
+            closeShare();
+            if (!kitchen.on) {
+                kitchen.on = true;
+                renderKitchen();
+                saveKitchenPrefs();
+                loadKitchenData();
+                showToast('Küche eingeschaltet – dort liegen deine Rezepte.');
+            }
+            const r = data.recipe;
+            openRecipeEditor(null, r.ingredients, r.name);
+            $('recipe-servings').value = r.servings;
+            renderRecipeTotal();
+            $('recipe-hint').innerText = `Aus ${data.source || 'dem geteilten Inhalt'} übernommen${r.note ? ' – ' + r.note : ''}. Bitte kurz prüfen und speichern.`;
+        } catch (err) {
+            alert('Rezept konnte nicht übernommen werden: ' + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerText = '🍳 Als Rezept übernehmen';
+        }
+    });
+
+    $('share-eat-btn').addEventListener('click', () => {
+        closeShare();
+        showView('today');
+        const text = [shared.title, shared.text].filter(Boolean).join(' ').replace(sharedUrl(), '').trim();
+        $('food-input').value = text;
+        if (shared.file) setPickedImage(shared.file);
+        fitFoodInput();
+        $('food-input').focus();
+        showToast('Prüfen und auf „Senden“ tippen.');
+    });
+
     // ---------- Willkommen (nur beim ersten Einrichten) ----------
 
     function openWelcome() {
@@ -5407,6 +5622,9 @@
             return;
         }
         remindLoaded = !!data; // noch nie gespeichert -> beim nächsten Öffnen neu nach aktuellem Ziel berechnen
+        remindWakeToday = s.wakeToday || null;
+        wakeToken = data?.wake_token || null;
+        renderWake();
         const s = data?.settings || {};
         $('remind-on').checked = !!data?.enabled;
         $('remind-wake').value = s.wake || '07:00';
@@ -5458,7 +5676,8 @@
                 wake: $('remind-wake').value || '07:00',
                 sleep: $('remind-sleep').value || '23:00',
                 meals: [...remindMeals].sort((a, b) => a.time.localeCompare(b.time)),
-                water: { on: $('remind-water-on').checked, every: Number($('remind-water-every').value) }
+                water: { on: $('remind-water-on').checked, every: Number($('remind-water-every').value) },
+                ...(remindWakeToday ? { wakeToday: remindWakeToday } : {})
             },
             updated_at: new Date().toISOString()
         });
@@ -5471,6 +5690,57 @@
         renderRemindMeals();
         setRemindState(enabled);
         showToast(enabled ? 'Erinnerungen gespeichert' : 'Erinnerungen ausgeschaltet');
+    });
+
+    // ----- Aufwachen erkennen -----
+
+    let remindWakeToday = null;
+    let wakeToken = null;
+
+    function renderWake() {
+        const w = remindWakeToday;
+        if (w && w.date === todayStr()) {
+            $('wake-status').innerText = `Heute aufgestanden um ${w.time} – die Essens-Erinnerungen richten sich danach.`;
+        }
+        $('wake-auto').checked = !!wakeToken;
+        $('wake-setup').classList.toggle('hidden', !wakeToken);
+        if (wakeToken) $('wake-url').value = `${SUPABASE_URL}/functions/v1/remind?wake=${wakeToken}`;
+    }
+
+    async function sendWakeNow(silent = false) {
+        try {
+            const { data, error } = await supabase.functions.invoke('remind', { body: { wake_me: true } });
+            if (error) throw new Error(error.message);
+            if (!data.ok) throw new Error(data.error || 'Nicht gespeichert');
+            remindWakeToday = { date: todayStr(), time: data.wake };
+            renderWake();
+            showToast(data.already ? `Heute schon gemeldet (${data.wake}) – Essenszeiten sind angepasst.` : `Guten Morgen ☀️ Essenszeiten ab ${data.wake} angepasst.`);
+        } catch (err) {
+            if (!silent) alert('Hat nicht geklappt: ' + (/Unbekannt/.test(err.message) ? 'Erinnerungen erst einmal speichern (🔔).' : err.message));
+        }
+    }
+
+    $('wake-now-btn').addEventListener('click', () => sendWakeNow());
+
+    $('wake-auto').addEventListener('change', async () => {
+        const on = $('wake-auto').checked;
+        const token = on ? [...crypto.getRandomValues(new Uint8Array(24))].map(b => b.toString(16).padStart(2, '0')).join('') : null;
+        const { error } = await supabase.from('reminder_settings').upsert({ user_id: currentSession.user.id, wake_token: token });
+        if (error) {
+            $('wake-auto').checked = !on;
+            return alert('Nicht gespeichert: ' + error.message);
+        }
+        wakeToken = token;
+        renderWake();
+    });
+
+    $('wake-copy-btn').addEventListener('click', async () => {
+        try {
+            await navigator.clipboard.writeText($('wake-url').value);
+            showToast('Adresse kopiert');
+        } catch (e) {
+            $('wake-url').select();
+        }
     });
 
     $('remind-test-btn').addEventListener('click', async () => {

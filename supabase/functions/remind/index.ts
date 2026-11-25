@@ -43,7 +43,27 @@ webpush.setVapidDetails(
 
 type Sub = { endpoint: string; user_id: string; p256dh: string; auth: string };
 type MealSlot = { time: string; meal: string; label: string; on?: boolean };
-type Settings = { wake?: string; sleep?: string; meals?: MealSlot[]; water?: { on?: boolean; every?: number } };
+type Settings = {
+  wake?: string; sleep?: string; meals?: MealSlot[]; water?: { on?: boolean; every?: number };
+  wakeToday?: { date: string; time: string };   // tatsächlich aufgestanden (Signal von Tasker/Automate oder "Bin wach")
+};
+
+// Heute später/früher aufgestanden? Dann alle Essenszeiten und das Wasser für heute mitverschieben
+function shiftedForToday(s: Settings, day: string): Settings {
+  const w = s.wakeToday;
+  const planned = toMin(s.wake) ?? 7 * 60, actual = toMin(w?.time);
+  if (!w || w.date !== day || actual === null || actual === planned) return s;
+  const shift = actual - planned;
+  const sleep = sleepMin(s);
+  return {
+    ...s,
+    wake: w.time,
+    meals: (s.meals || []).map((m) => {
+      const t = toMin(m.time);
+      return t === null ? m : { ...m, time: hhmm(Math.min(sleep - 30, Math.max(actual + 15, t + shift))) };
+    }),
+  };
+}
 type Msg = { title: string; body: string; tag: string; url?: string };
 
 async function sendTo(subs: Sub[], msg: Msg) {
@@ -113,8 +133,8 @@ function waterSlots(s: Settings): number[] {
 }
 
 async function remindUser(row: { user_id: string; settings: Settings; tz: string }) {
-  const s = row.settings || {};
   const { day, min } = localNow(row.tz);
+  const s = shiftedForToday(row.settings || {}, day);
   const meals = (s.meals || []).filter((m) => m.on !== false && toMin(m.time) !== null);
   const dueMeal = meals.find((m) => isDue(toMin(m.time)!, min));
   const dueWater = s.water?.on ? waterSlots(s).find((t) => isDue(t, min)) : undefined;
@@ -177,7 +197,7 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
         }
       } catch { /* Reste sind nur ein Zusatz */ }
       // Tippen öffnet in der App "Was soll ich essen?" (nur mit KI sichtbar, sonst einfach die App)
-      msgs.push({ title: `🍽️ Zeit für: ${dueMeal.label}`, body, tag: `meal-${day}-${dueMeal.time}`, url: "./?ideen=1" });
+      msgs.push({ title: `🍽️ Zeit für: ${dueMeal.label}`, body, tag: `meal-${day}-${meals.indexOf(dueMeal)}-${dueMeal.meal}`, url: "./?ideen=1" });
     }
   }
 
@@ -243,10 +263,42 @@ async function weeklyPush() {
   return sent;
 }
 
+// "Bin wach": erstes Signal des Tages zwischen 3 und 14 Uhr zählt (Schlummern/Entsperren ändern nichts mehr)
+async function setWake(filter: string) {
+  const rows: { user_id: string; settings: Settings; tz: string }[] = await rest(`reminder_settings?${filter}&select=user_id,settings,tz`);
+  if (!rows.length) return { ok: false, error: "Unbekannter Schlüssel." };
+  const r = rows[0];
+  const { day, min } = localNow(r.tz);
+  const s = r.settings || {};
+  if (s.wakeToday?.date === day) return { ok: true, wake: s.wakeToday.time, already: true };
+  if (min < 3 * 60 || min > 14 * 60) return { ok: false, error: "Nur zwischen 3 und 14 Uhr." };
+  const wakeToday = { date: day, time: hhmm(min) };
+  await rest(`reminder_settings?user_id=eq.${r.user_id}`, {
+    method: "PATCH", body: JSON.stringify({ settings: { ...s, wakeToday } }),
+  });
+  return { ok: true, wake: wakeToday.time };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
+    // Tasker/Automate: GET oder POST .../remind?wake=<persönlicher Schlüssel>
+    const wakeToken = new URL(req.url).searchParams.get("wake");
+    if (wakeToken) {
+      if (!/^[a-f0-9]{32,64}$/.test(wakeToken)) return out({ ok: false, error: "Ungültiger Schlüssel." }, 400);
+      return out(await setWake(`wake_token=eq.${wakeToken}`));
+    }
     const body = await req.json().catch(() => ({}));
+
+    // "Bin wach" aus der App (mit Login)
+    if (body.wake_me) {
+      const auth = await fetch(`${SB}/auth/v1/user`, {
+        headers: { apikey: req.headers.get("apikey") || "", Authorization: req.headers.get("Authorization") || "" },
+      });
+      if (!auth.ok) return out({ error: "Nicht angemeldet." }, 401);
+      const user = await auth.json();
+      return out(await setWake(`user_id=eq.${user.id}`));
+    }
 
     // Testnachricht an die eigenen Geräte
     if (body.test) {
