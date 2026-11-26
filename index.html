@@ -1053,7 +1053,13 @@
 
         <!-- Nur für Admins: eingegangene Meldungen -->
         <details class="card hidden" id="inbox-card" data-no-i18n>
-            <summary><h3>📬 Meldungen <span id="inbox-count" class="sub-text"></span></h3></summary>
+            <summary><h3>📬 Meldungen &amp; Zahlen <span id="inbox-count" class="sub-text"></span></h3></summary>
+            <div id="admin-overview" class="sub-text" style="margin: 10px 0 6px; line-height: 1.7;"></div>
+            <div class="weigh-every-row" style="margin: 0 0 10px; gap: 8px; flex-wrap: wrap;">
+                <button type="button" class="btn btn-sec" id="signup-toggle-btn" style="width: auto; margin: 0; padding: 8px 12px;"></button>
+                <label for="signup-max" style="margin: 0;">max. Konten</label>
+                <input type="number" id="signup-max" min="1" step="1" placeholder="∞" style="width: 80px; margin: 0;">
+            </div>
             <div class="chips" id="inbox-filter" style="margin: 8px 0 4px;">
                 <button type="button" class="chip active" data-v="offen">Offen</button>
                 <button type="button" class="chip" data-v="alle">Alle</button>
@@ -1255,7 +1261,7 @@
 <script>
     // Für Fehlerberichte: Version und die letzten Fehlermeldungen (nur Technik, keine Inhalte)
     // Bei jeder Änderung hochzählen UND version.json gleich setzen: daran erkennt die installierte App ein Update
-    const APP_VERSION = '2026-11-26.2';
+    const APP_VERSION = '2026-11-27.1';
     const recentErrors = [];
     const noteError = (msg) => {
         recentErrors.push({ at: new Date().toISOString(), msg: String(msg).slice(0, 300) });
@@ -1545,11 +1551,18 @@
                     $('consent-input').focus();
                     return;
                 }
+                // Registrierung pausiert (Admin-Schalter bzw. Obergrenze erreicht)? Dann Warteliste anbieten
+                const { data: open } = await supabase.rpc('signup_open');
+                if (open === false) return offerWaitlist(email);
                 // Einwilligung mit Zeitpunkt und Fassung beim Nutzer festhalten (Nachweis, Art. 7 DSGVO)
                 ({ data, error } = await supabase.auth.signUp({
                     email, password,
-                    options: { data: { consent_at: new Date().toISOString(), consent_version: '2026-11-25', adult: true, lang: APP_LANG } }
+                    options: {
+                        emailRedirectTo: location.origin + location.pathname,
+                        data: { consent_at: new Date().toISOString(), consent_version: '2026-11-25', adult: true, lang: APP_LANG }
+                    }
                 }));
+                if (error && /signup_closed|Database error saving new user/i.test(error.message)) return offerWaitlist(email);
                 // Supabase meldet bei bereits vergebener E-Mail keinen Fehler, sondern einen Nutzer ohne Identitäten
                 if (!error && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
                     alert('Für diese E-Mail gibt es schon ein Konto. Tippe auf "Passwort vergessen?", um ein neues Passwort zu setzen.');
@@ -1579,6 +1592,13 @@
             loginBtn.disabled = false;
         }
     });
+
+    async function offerWaitlist(email) {
+        if (!confirm('Neue Konten sind gerade pausiert.\n\nMöchtest du auf die Warteliste? Wir schreiben dir einmal an diese E-Mail, sobald es losgeht.')) return;
+        const { error } = await supabase.rpc('join_waitlist', { p_email: email, p_lang: APP_LANG, p_source: 'app' });
+        if (error) return alert('Nicht eingetragen: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+        alert('Du stehst auf der Warteliste. Wir melden uns, sobald es losgeht.');
+    }
 
     $('forgot-btn').addEventListener('click', async () => {
         const email = $('email-input').value.trim();
@@ -1761,7 +1781,42 @@
         inboxRows = data || [];
         $('inbox-card').classList.remove('hidden');
         renderInbox();
+        loadAdminOverview();
     }
+
+    // Nutzer, Warteliste, Website-Besucher und der Schalter für neue Konten
+    let adminSignup = { open: false, max_users: null };
+    async function loadAdminOverview() {
+        const { data: o, error } = await supabase.rpc('admin_overview');
+        if (error || !o) return;
+        adminSignup = { open: false, max_users: null, ...(o.signup || {}) };
+        const sources = Object.entries(o.sources_7d || {}).map(([k, v]) => `${esc(k)} ${v}`).join(', ');
+        $('admin-overview').innerHTML = [
+            `👥 <b>${o.users}</b> Konten (${o.users_7d} neu in 7 Tagen, ${o.active_7d} aktiv)`,
+            `⏳ <b>${o.waitlist}</b> auf der Warteliste`,
+            `🌐 Website: <b>${o.views_today}</b> Aufrufe heute, ${o.views_7d} in 7 Tagen, ${o.cta_7d}× „Starten“ geklickt`,
+            sources ? `↪ Herkunft (7 Tage): ${sources}` : '',
+            `🔑 Registrierung: <b>${o.signup_open ? 'offen' : 'pausiert'}</b>${adminSignup.open && !o.signup_open ? ' (Obergrenze erreicht)' : ''}`
+        ].filter(Boolean).join('<br>');
+        $('signup-toggle-btn').textContent = adminSignup.open ? 'Registrierung pausieren' : 'Registrierung öffnen';
+        $('signup-max').value = adminSignup.max_users ?? '';
+    }
+
+    async function saveSignupConfig(next) {
+        const { error } = await supabase.from('app_config').update({ value: next, updated_at: new Date().toISOString() }).eq('key', 'signup');
+        if (error) return alert('Nicht gespeichert: ' + error.message);
+        showToast(next.open ? 'Registrierung ist offen' : 'Registrierung ist pausiert');
+        loadAdminOverview();
+    }
+    $('signup-toggle-btn').addEventListener('click', () => {
+        const open = !adminSignup.open;
+        if (!confirm(open ? 'Neue Konten wieder zulassen?' : 'Neue Konten pausieren? Neue Besucher landen dann auf der Warteliste.')) return;
+        saveSignupConfig({ ...adminSignup, open });
+    });
+    $('signup-max').addEventListener('change', () => {
+        const n = parseInt($('signup-max').value, 10);
+        saveSignupConfig({ ...adminSignup, max_users: n > 0 ? n : null });
+    });
 
     function renderInbox() {
         const open = inboxRows.filter(r => r.status === 'neu' || r.status === 'in_arbeit');

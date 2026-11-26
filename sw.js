@@ -1,7 +1,7 @@
 // Offline-Modus: App-Dateien zwischenspeichern, damit die App auch ohne Netz startet.
 // Daten (Supabase, Open Food Facts, KI) laufen NICHT über diesen Cache.
 // Nach Änderungen an dieser Datei die Versionsnummer erhöhen.
-const CACHE = 'kcal-v9';
+const CACHE = 'kcal-v10';
 const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
     './vendor/supabase-2.45.4.js', './i18n.js'];
 // Nur für Scanner bzw. Info nötig: ein Fehler hier darf die Installation nicht abbrechen

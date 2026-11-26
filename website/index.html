@@ -72,6 +72,15 @@
         details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px 20px; margin-bottom: 10px; }
         summary { cursor: pointer; font-weight: 700; }
         details p { color: var(--mute); margin: 10px 0 0; }
+        .wl { display: flex; flex-wrap: wrap; gap: 10px; max-width: 520px; }
+        .wl input { flex: 1 1 220px; min-width: 0; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--text); font: inherit; }
+        .wl button { border: 0; cursor: pointer; font: inherit; font-weight: 700; }
+        .wl-note { font-size: 13px; color: var(--mute); margin: 8px 0 0; max-width: 34em; }
+        .wl-done { color: var(--accent); font-weight: 700; }
+        .hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+        .final .wl { margin: 0 auto; justify-content: center; }
+        .final .wl-note { margin-left: auto; margin-right: auto; }
+        [hidden] { display: none !important; }
         .final { text-align: center; }
         .final .cta { justify-content: center; }
         footer { border-top: 1px solid var(--line); padding: 28px 0 40px; color: var(--mute); font-size: 14px; }
@@ -98,7 +107,8 @@
             <div class="lang" role="group" aria-label="Language">
                 <button type="button" data-lang="en">EN</button> · <button type="button" data-lang="de">DE</button>
             </div>
-            <a class="btn btn-primary btn-small" href="../" data-t="open">Open app</a>
+            <a class="btn btn-primary btn-small" href="../" data-t="open" data-when="open">Open app</a>
+            <a class="btn btn-ghost btn-small" href="../" data-t="signin" data-when="closed" hidden>Sign in</a>
         </div>
     </div>
 </header>
@@ -109,9 +119,18 @@
             <p class="eyebrow" data-t="eyebrow">Calories &amp; protein, made simple</p>
             <h1 data-t="h1">Log a meal in seconds. Reach your goal without the stress.</h1>
             <p class="lead" data-t="lead">Type, say or snap what you ate – the app does the maths. It learns what your body really burns and suggests meals that fit your day.</p>
-            <div class="cta">
-                <a class="btn btn-primary" href="../" data-t="cta">Start for free</a>
+            <div class="cta" data-when="open">
+                <a class="btn btn-primary" href="../" data-t="cta" data-track="cta">Start for free</a>
                 <span class="soon" data-t="soon">Google Play – coming soon</span>
+            </div>
+            <div data-when="closed" hidden>
+                <p data-t="wl-head" style="margin: 0 0 10px; font-weight: 700;">We are opening step by step. Get notified when it is your turn:</p>
+                <form class="wl" novalidate>
+                    <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" aria-label="Email">
+                    <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+                    <button type="submit" class="btn btn-primary" data-t="wl-btn">Notify me</button>
+                </form>
+                <p class="wl-note" data-t="wl-note">We email you once when your spot is ready, then delete your address. <a href="../datenschutz.html#warteliste">Privacy</a></p>
             </div>
             <p class="fine" data-t="fine">Free · no ads · data stored in the EU · English &amp; German</p>
         </div>
@@ -198,7 +217,15 @@
         <div class="wrap">
             <h2 data-t="f-cta-title">Ready when you are.</h2>
             <p class="sub" style="margin-left: auto; margin-right: auto;" data-t="f-cta-sub">Your first meal is logged in under a minute.</p>
-            <div class="cta"><a class="btn btn-primary" href="../" data-t="cta">Start for free</a></div>
+            <div class="cta" data-when="open"><a class="btn btn-primary" href="../" data-t="cta" data-track="cta">Start for free</a></div>
+            <div data-when="closed" hidden>
+                <form class="wl" novalidate>
+                    <input type="email" name="email" required autocomplete="email" placeholder="you@example.com" aria-label="Email">
+                    <input type="text" name="website" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+                    <button type="submit" class="btn btn-primary" data-t="wl-btn">Notify me</button>
+                </form>
+                <p class="wl-note" data-t="wl-note">We email you once when your spot is ready, then delete your address. <a href="../datenschutz.html#warteliste">Privacy</a></p>
+            </div>
         </div>
     </section>
 </main>
@@ -266,6 +293,13 @@
         q4: 'Geht das auch offline?', a4: 'Ja. Du kannst ohne Netz eintragen – die Einträge werden automatisch hochgeladen, sobald du wieder online bist.',
         q5: 'Fehler gefunden oder eine Idee?', a5: 'In der App unter „Mehr“ → „Fehler melden & Ideen“ – oder schreib an hello.trackerapp@gmail.com.',
         'f-cta-title': 'Bereit, wenn du es bist.', 'f-cta-sub': 'Deine erste Mahlzeit ist in unter einer Minute eingetragen.',
+        signin: 'Anmelden',
+        'wl-head': 'Wir öffnen Schritt für Schritt. Lass dich benachrichtigen, sobald du dran bist:',
+        'wl-btn': 'Benachrichtigen',
+        'wl-note': 'Wir schreiben dir einmal, sobald dein Platz frei ist, und löschen deine Adresse danach. <a href="../datenschutz.html#warteliste">Datenschutz</a>',
+        'wl-ok': '✓ Du stehst auf der Liste. Wir melden uns!',
+        'wl-bad': 'Bitte gib eine gültige E-Mail-Adresse ein.',
+        'wl-err': 'Das hat nicht geklappt. Bitte versuch es später noch einmal.',
         privacy: 'Datenschutz', delete: 'Konto löschen', contact: 'Kontakt', sources: 'Quellen & Lizenzen'
     };
     const EN = {};
@@ -277,7 +311,7 @@
         document.querySelectorAll('[data-t]').forEach(el => {
             const v = dict[el.dataset.t];
             if (v == null) return;
-            if (lang === 'de') el.textContent = v; else el.innerHTML = v;
+            if (lang === 'de' && !v.includes('<a ')) el.textContent = v; else el.innerHTML = v;
         });
         document.querySelectorAll('[data-shot]').forEach(img => { img.src = `img/app-${img.dataset.shot}-${lang}.png`; });
         document.querySelectorAll('.lang button').forEach(b => b.classList.toggle('on', b.dataset.lang === lang));
@@ -291,6 +325,50 @@
     try { start = start || localStorage.getItem('lang'); } catch (e) {}
     start = start || ((navigator.language || 'en').toLowerCase().startsWith('de') ? 'de' : 'en');
     setLang(start === 'de' ? 'de' : 'en');
+
+    // ---------- Warteliste und Besucherzahlen (Supabase, EU) ----------
+    // Zähler ohne Cookies, ohne IP und ohne Kennung: nur "+1 Aufruf heute", Sprache und die Domain, von der jemand kam.
+    const SB = 'https://tzqzgcnacpkzdyvahioo.supabase.co/rest/v1/rpc/';
+    const KEY = 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M';
+    const rpc = (fn, body) => fetch(SB + fn, {
+        method: 'POST', keepalive: true,
+        headers: { apikey: KEY, 'Content-Type': 'application/json' }, body: JSON.stringify(body || {})
+    });
+    const lang = () => document.documentElement.lang === 'de' ? 'de' : 'en';
+    const EN_MSG = { 'wl-ok': '✓ You are on the list. We will be in touch!', 'wl-bad': 'Please enter a valid email address.', 'wl-err': 'That did not work. Please try again later.' };
+    const msg = k => (lang() === 'de' ? DE : EN_MSG)[k];
+    let from = '';
+    try { from = document.referrer ? new URL(document.referrer).hostname.replace(/^www\./, '') : ''; } catch (e) {}
+    if (from === location.hostname) from = '';
+    const local = /^(localhost|127\.)/.test(location.hostname);
+    const track = ev => { if (!local) rpc('track', { p_event: ev, p_lang: lang(), p_source: from }).catch(() => {}); };
+    track('view');
+    document.querySelectorAll('[data-track="cta"]').forEach(a => a.addEventListener('click', () => track('cta')));
+
+    // Registrierung offen? Sonst statt "Starten" die Warteliste zeigen
+    rpc('signup_open').then(r => r.json()).then(open => {
+        document.querySelectorAll('[data-when]').forEach(el => { el.hidden = (el.dataset.when === 'open') !== (open === true); });
+    }).catch(() => {});
+
+    document.querySelectorAll('form.wl').forEach(form => form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const note = form.nextElementSibling;
+        const email = form.email.value.trim();
+        if (form.website.value) return;   // Bot-Falle
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { note.textContent = msg('wl-bad'); form.email.focus(); return; }
+        const btn = form.querySelector('button');
+        btn.disabled = true;
+        try {
+            const r = await rpc('join_waitlist', { p_email: email, p_lang: lang(), p_source: 'web' });
+            if (!r.ok) throw new Error(r.status);
+            track('waitlist');
+            note.hidden = true;
+            form.outerHTML = '<p class="wl-done">' + msg('wl-ok') + '</p>';
+        } catch (err) {
+            note.textContent = msg('wl-err');
+            btn.disabled = false;
+        }
+    }));
 </script>
 </body>
 </html>

@@ -54,3 +54,20 @@ Ohne eigene Domain verlangen Resend und Co. eine Domain bzw. landen im Spam, dah
 
 ## Ideen für später
 - [ ] Anmelde-Stopp ab X Nutzern + Warteliste (Tabelle `waitlist`, Zähler im Dashboard, Freischalten per Klick)
+
+## Netlify (Website unter /, App unter /app/)
+
+1. netlify.com, mit GitHub anmelden (kostenloser Plan).
+2. Add new site, Import an existing project, GitHub, Repo kcal-tracker waehlen. Einstellungen kommen aus netlify.toml, nichts aendern, Deploy.
+3. Site configuration, Change site name, z. B. kcal-tracker (ergibt kcal-tracker.netlify.app).
+4. Supabase Dashboard, Authentication, URL Configuration: Site URL auf https://NAME.netlify.app/app/ setzen und unter Redirect URLs https://NAME.netlify.app/app/** ergaenzen (GitHub-Adresse drin lassen).
+5. Die App einmal von der neuen Adresse aus zum Startbildschirm hinzufuegen (Push neu einschalten, da neue Adresse).
+
+Jeder Push auf master baut Netlify automatisch neu. GitHub Pages laeuft parallel weiter.
+
+## Warteliste und Anmeldestopp
+
+- Schalter und Obergrenze: in der App unter Mehr, Meldungen und Zahlen (nur Admin).
+- Solange pausiert: Website zeigt Warteliste statt Starten, die App bietet beim Registrieren die Warteliste an, der Server lehnt neue Konten ab.
+- Warteliste ansehen: Supabase Table Editor, waitlist. Nach dem Benachrichtigen notified_at setzen bzw. Eintraege loeschen (so steht es in der Datenschutzerklaerung).
+- Besucherzahlen der Website: im Admin-Ueberblick (ohne Cookies, Tabelle site_stats).

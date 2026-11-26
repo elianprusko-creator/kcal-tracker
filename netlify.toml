@@ -1,0 +1,47 @@
+# Netlify: Website unter /, App unter /app/ (siehe scripts/netlify-build.js)
+[build]
+  command = "node scripts/netlify-build.js"
+  publish = "dist"
+
+# Kurze Adressen für Datenschutz und Konto löschen (z. B. für den Play Store)
+[[redirects]]
+  from = "/datenschutz"
+  to = "/app/datenschutz.html"
+  status = 301
+
+[[redirects]]
+  from = "/privacy"
+  to = "/app/datenschutz.html?lang=en"
+  status = 301
+
+[[redirects]]
+  from = "/datenschutz.html"
+  to = "/app/datenschutz.html"
+  status = 301
+
+[[redirects]]
+  from = "/konto-loeschen"
+  to = "/app/konto-loeschen.html"
+  status = 301
+
+[[redirects]]
+  from = "/konto-loeschen.html"
+  to = "/app/konto-loeschen.html"
+  status = 301
+
+# Service Worker und Versionsdatei nie zwischenspeichern, damit Updates sofort ankommen
+[[headers]]
+  for = "/app/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/app/version.json"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
