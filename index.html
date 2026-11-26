@@ -364,6 +364,14 @@
         .tabs button { flex: 1; background: none; border: none; color: var(--mute); padding: 8px 4px; font: inherit; font-size: 14px;
             font-weight: 600; border-radius: 8px; cursor: pointer; }
         .tabs button.active { background: var(--card); color: var(--text); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15); }
+        /* Punkt am Reiter: dort ist etwas offen (z. B. Wiegen fällig) */
+        .tabs button { position: relative; }
+        .tabs button.has-dot::after { content: ''; position: absolute; top: 5px; right: 8px; width: 8px; height: 8px;
+            border-radius: 50%; background: var(--danger); box-shadow: 0 0 0 2px var(--field); }
+        .weigh-due { background: var(--field); border-left: 3px solid var(--danger); border-radius: 8px; padding: 8px 10px;
+            font-size: 14px; margin: 4px 0 10px; cursor: pointer; }
+        .weigh-every-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 13px; color: var(--mute); }
+        .weigh-every-row select { width: auto; margin: 0; padding: 6px 8px; font-size: 13px; }
         .view { display: flex; flex-direction: column; gap: 16px; }
         .view.hidden { display: none; }
         /* Küche im eigenen Reiter: aufgeklappt, ohne Kopfzeile zum Zuklappen */
@@ -766,6 +774,7 @@
                 <h3>Gewicht</h3>
                 <span class="entry-kcal" id="weight-current"></span>
             </div>
+            <div class="weigh-due hidden" id="weigh-due" role="button" tabindex="0"></div>
             <svg class="chart hidden" id="weight-chart" viewBox="0 0 320 140"></svg>
             <div class="chart-avg" id="weight-info" style="margin-top: 4px;"></div>
             <div class="row" style="margin-top: 12px;">
@@ -773,6 +782,14 @@
                 <button type="button" class="btn btn-small" id="weight-save-btn" style="flex: 0 0 auto;">Eintragen</button>
             </div>
             <p class="preview-note" style="margin: 6px 0 0;">Kalorien- und Eiweißziel passen sich automatisch an dein Gewicht an.</p>
+            <div class="weigh-every-row">
+                <label for="weigh-every" style="margin: 0;">Ans Wiegen erinnern</label>
+                <select id="weigh-every">
+                    <option value="4">2× pro Woche</option>
+                    <option value="7">1× pro Woche</option>
+                    <option value="0">Aus</option>
+                </select>
+            </div>
         </div>
 
         </div>
@@ -1516,6 +1533,8 @@
         suggestLoaded = false;
         yesterdayEntries = [];
         weightsList = [];
+        weightsLoaded = false;
+        updateWeighDue();
         waterMl = 0;
         hideToast();
         updateOfflineBadge();
@@ -2423,10 +2442,56 @@
             weightsList = (data || []).map(w => ({ day: w.day, kg: Number(w.kg) }));
             writeStore(userKey('weights'), weightsList);
         }
+        weightsLoaded = true;
         renderWeight();
     }
 
+    // Wiegen fällig? 1–2× pro Woche reicht für einen guten Verlauf (Standard: 2×, d. h. nach 4 Tagen ohne Wert)
+    let weightsLoaded = false;
+    const weighEvery = () => {
+        const v = userPrefs.weighIn?.every;
+        return [0, 4, 7].includes(v) ? v : 4;
+    };
+
+    function weighDue() {
+        const every = weighEvery();
+        if (!every || !currentSession || !weightsLoaded) return null;
+        const last = weightsList[weightsList.length - 1];
+        if (!last) return { days: null };
+        const days = Math.round((parseDay(todayStr()) - parseDay(last.day)) / 86400000);
+        return days >= every ? { days } : null;
+    }
+
+    function updateWeighDue() {
+        const due = weighDue();
+        document.querySelector('#tabs button[data-view="progress"]').classList.toggle('has-dot', !!due);
+        const box = $('weigh-due');
+        box.classList.toggle('hidden', !due);
+        if (due) {
+            box.textContent = due.days === null
+                ? '⚖️ Trag dein Gewicht ein, dann siehst du hier bald deinen Verlauf.'
+                : `⚖️ Zeit fürs Wiegen: zuletzt vor ${due.days} Tagen. Am besten morgens nach dem Aufstehen, vor dem Frühstück.`;
+        }
+        $('weigh-every').value = String(weighEvery());
+        // Punkt auf dem App-Symbol, wo das Handy es unterstützt
+        try {
+            if ('setAppBadge' in navigator) (due ? navigator.setAppBadge() : navigator.clearAppBadge()).catch(() => {});
+        } catch (e) {}
+    }
+
+    $('weigh-due').addEventListener('click', () => $('weight-input').focus());
+    $('weigh-every').addEventListener('change', () => {
+        userPrefs.weighIn = { every: Number($('weigh-every').value) };
+        savePrefs();
+        updateWeighDue();
+    });
+    // App über Nacht offen gelassen: beim Zurückkehren neu prüfen
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && currentSession) updateWeighDue();
+    });
+
     function renderWeight() {
+        updateWeighDue();
         const list = weightsList;
         const last = list[list.length - 1];
         $('weight-current').innerText = last ? `${fmtKg(last.kg)} kg` : '';
@@ -3896,6 +3961,7 @@
         kitchen = { ...KITCHEN_DEFAULTS, ...(userPrefs.kitchen || {}) };
         renderKitchen();
         if (adaptState) renderAdaptive();
+        updateWeighDue();
     }
 
     async function saveKitchenPrefs() {
