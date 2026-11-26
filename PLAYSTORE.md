@@ -30,9 +30,9 @@ Ohne eigene Domain verlangen Resend und Co. eine Domain bzw. landen im Spam, dah
    - Host `smtp.gmail.com` · Port `587` · Username: die Gmail-Adresse · Password: das App-Passwort
 4. Authentication → Rate Limits: „emails sent per hour“ auf z. B. 30 lassen/setzen.
 5. Authentication → Emails → Templates: Betreff und Inhalt aus `supabase/templates/` einfügen:
-   - Confirm signup: Betreff `Bestätige deine E-Mail – Kcal Tracker` → `confirmation.html`
-   - Reset password: Betreff `Neues Passwort – Kcal Tracker` → `recovery.html`
-   - Change email: Betreff `Neue E-Mail bestätigen – Kcal Tracker` → `email_change.html`
+   - Confirm signup: Betreff `Bestätige deine E-Mail / Confirm your email – Kcal Tracker` → `confirmation.html`
+   - Reset password: Betreff `Neues Passwort / New password – Kcal Tracker` → `recovery.html`
+   - Change email: Betreff `Neue E-Mail bestätigen / Confirm new email – Kcal Tracker` → `email_change.html`
 6. Authentication → Sign In / Providers → Email: „Confirm email“ einschalten (falls aus).
 7. Testen: in der App „Passwort vergessen?“ mit einer eigenen Adresse.
 - [ ] Play-Entwicklerkonto (25 $), Identitätsprüfung

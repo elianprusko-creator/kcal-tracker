@@ -49,6 +49,7 @@
     <p class="mute">Passwort vergessen? Setze es in der <a href="./">App</a> über „Passwort vergessen?“ zurück und komm dann hierher zurück.
         Mehr dazu in der <a href="datenschutz.html#konto-loeschen">Datenschutzerklärung</a>.</p>
 </main>
+<script src="i18n.js"></script>
 <script src="vendor/supabase-2.45.4.js"></script>
 <script>
     const sb = window.supabase.createClient('https://tzqzgcnacpkzdyvahioo.supabase.co', 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M',
@@ -59,7 +60,7 @@
     $('form').addEventListener('submit', async (e) => {
         e.preventDefault();
         const typed = $('confirm').value.trim().toUpperCase();
-        if (typed !== 'LÖSCHEN' && typed !== 'LOESCHEN') return say('Bitte LÖSCHEN eintippen.', 'err');
+        if (!['LÖSCHEN', 'LOESCHEN', 'DELETE'].includes(typed)) return say('Bitte LÖSCHEN eintippen.', 'err');
         $('btn').disabled = true;
         say('Wird gelöscht…');
         try {

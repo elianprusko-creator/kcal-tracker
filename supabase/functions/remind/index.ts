@@ -66,6 +66,53 @@ function shiftedForToday(s: Settings, day: string): Settings {
 }
 type Msg = { title: string; body: string; tag: string; url?: string };
 
+// ---------- Sprache (user_prefs.prefs.lang, gesetzt von der App) ----------
+type Lang = "de" | "en";
+const asLang = (v: unknown): Lang => (v === "en" ? "en" : "de");
+const MEAL_EN: Record<string, string> = { fruehstueck: "Breakfast", mittag: "Lunch", abend: "Dinner", snack: "Snack" };
+const mealLabel = (m: MealSlot, lang: Lang) =>
+  lang === "en" ? (/schlaf/i.test(m.label) ? "Snack before bed" : MEAL_EN[m.meal] || m.label) : m.label;
+const num = (lang: Lang, n: number, digits = 0) =>
+  n.toLocaleString(lang === "en" ? "en-GB" : "de-DE", { maximumFractionDigits: digits });
+const TXT = {
+  de: {
+    mealTitle: (l: string) => `🍽️ Zeit für: ${l}`,
+    noGoal: "Nicht vergessen zu essen – und danach kurz eintragen.",
+    goalReached: "Dein Kalorienziel für heute ist schon erreicht. Falls du Hunger hast: etwas Leichtes mit viel Eiweiß.",
+    left: (k: string, p: string) => `Heute noch offen: ${k} kcal · ${p} g Eiweiß. `,
+    perMeal: (k: string) => `Für diese Mahlzeit ca. ${k} kcal`,
+    withProtein: (p: string) => ` mit ${p} g Eiweiß.`,
+    planned: (list: string) => `Geplant: ${list}. `,
+    cookToday: "heute kochen",
+    fridge: (list: string) => ` 🍲 Im Kühlschrank: ${list}.`,
+    port: "Port.",
+    waterTitle: "💧 Zeit für ein Glas Wasser",
+    waterBody: (a: string, b: string) => `Heute ${a} von ${b} l getrunken.`,
+    weeklyTitle: "🗓️ Dein Wochenrückblick",
+    weeklyBody: "Eine ruhige Zusammenfassung deiner Woche – tippe zum Ansehen.",
+    testTitle: "🔔 Test-Erinnerung",
+    testBody: "So sehen deine Erinnerungen aus. Funktioniert!",
+  },
+  en: {
+    mealTitle: (l: string) => `🍽️ Time for: ${l}`,
+    noGoal: "Don't forget to eat – and log it briefly afterwards.",
+    goalReached: "You have already reached today's calorie goal. If you are hungry: something light with plenty of protein.",
+    left: (k: string, p: string) => `Left today: ${k} kcal · ${p} g protein. `,
+    perMeal: (k: string) => `For this meal about ${k} kcal`,
+    withProtein: (p: string) => ` with ${p} g protein.`,
+    planned: (list: string) => `Planned: ${list}. `,
+    cookToday: "cook today",
+    fridge: (list: string) => ` 🍲 In the fridge: ${list}.`,
+    port: "port.",
+    waterTitle: "💧 Time for a glass of water",
+    waterBody: (a: string, b: string) => `${a} of ${b} l drunk today.`,
+    weeklyTitle: "🗓️ Your weekly review",
+    weeklyBody: "A calm summary of your week – tap to view.",
+    testTitle: "🔔 Test reminder",
+    testBody: "This is what your reminders look like. It works!",
+  },
+};
+
 async function sendTo(subs: Sub[], msg: Msg) {
   let sent = 0;
   const errors: string[] = [];
@@ -110,8 +157,6 @@ function localNow(tz: string) {
   return { day: `${get("year")}-${get("month")}-${get("day")}`, min: Number(get("hour")) * 60 + Number(get("minute")) };
 }
 
-const fmt = (n: number) => Math.round(n).toLocaleString("de-DE");
-const liter = (ml: number) => (ml / 1000).toLocaleString("de-DE", { maximumFractionDigits: 1 });
 
 // Fällig = Zeitpunkt in den letzten 10 Minuten (Cron läuft alle 5 Minuten, so geht keiner verloren)
 const isDue = (at: number, now: number) => at <= now && at > now - 10;
@@ -143,12 +188,17 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
   const subs: Sub[] = await rest(`push_subscriptions?user_id=eq.${row.user_id}&select=*`);
   if (!subs.length) return null;
 
-  const [profiles, entries, water] = await Promise.all([
+  const [profiles, entries, water, prefRows] = await Promise.all([
     rest(`profiles?user_id=eq.${row.user_id}&select=kcal_goal,protein_goal,weight_kg`),
     rest(`entries?user_id=eq.${row.user_id}&day=eq.${day}&select=kcal,protein_g,meal,created_at`),
     rest(`water?user_id=eq.${row.user_id}&day=eq.${day}&select=ml`),
+    rest(`user_prefs?user_id=eq.${row.user_id}&select=prefs`).catch(() => []),
   ]);
   const p = profiles[0] || {};
+  const prefs = prefRows[0]?.prefs || {};
+  const lang = asLang(prefs.lang);
+  const tx = TXT[lang];
+  const f = (n: number) => num(lang, Math.round(n));
   type E = { kcal: number; protein_g: number; meal: string | null; created_at: string };
   const eaten = (entries as E[]).reduce((a, e) => ({ kcal: a.kcal + Number(e.kcal || 0), p: a.p + Number(e.protein_g || 0) }), { kcal: 0, p: 0 });
   const lastEntry = Math.max(0, ...(entries as E[]).map((e) => Date.parse(e.created_at) || 0));
@@ -165,39 +215,37 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
       const mealsLeft = meals.filter((m) => toMin(m.time)! >= toMin(dueMeal.time)!).length || 1;
       let body: string;
       if (!p.kcal_goal) {
-        body = "Nicht vergessen zu essen – und danach kurz eintragen.";
+        body = tx.noGoal;
       } else if (kcalLeft <= 100) {
-        body = "Dein Kalorienziel für heute ist schon erreicht. Falls du Hunger hast: etwas Leichtes mit viel Eiweiß.";
+        body = tx.goalReached;
       } else {
         const perKcal = kcalLeft / mealsLeft;
         const perP = Math.max(0, proteinLeft) / mealsLeft;
-        body = `Heute noch offen: ${fmt(kcalLeft)} kcal · ${fmt(Math.max(0, proteinLeft))} g Eiweiß. ` +
-          `Für diese Mahlzeit ca. ${fmt(Math.round(perKcal / 10) * 10)} kcal` +
-          (perP >= 5 ? ` mit ${fmt(perP)} g Eiweiß.` : ".");
+        body = tx.left(f(kcalLeft), f(Math.max(0, proteinLeft))) +
+          tx.perMeal(f(Math.round(perKcal / 10) * 10)) +
+          (perP >= 5 ? tx.withProtein(f(perP)) : ".");
       }
       // Küche eingeschaltet: Reste im Kühlschrank nennen (die ältesten zuerst)
       try {
-        const prefs = await rest(`user_prefs?user_id=eq.${row.user_id}&select=prefs`);
-        const k = prefs[0]?.prefs?.kitchen;
+        const k = prefs.kitchen;
         if (k?.on && k.inReminders !== false) {
           // Geplantes Gericht für diese Mahlzeit zuerst nennen
           const planned: { name: string; cook: boolean }[] = await rest(
             `meal_plan?user_id=eq.${row.user_id}&day=eq.${day}&meal=eq.${dueMeal.meal}&status=eq.geplant&select=name,cook`,
           );
           if (planned.length) {
-            body = `Geplant: ${planned.map((p) => p.cook ? `${p.name} (heute kochen)` : p.name).join(", ")}. ` + body;
+            body = tx.planned(planned.map((p) => p.cook ? `${p.name} (${tx.cookToday})` : p.name).join(", ")) + body;
           }
           const left: { name: string; portions_left: number }[] = await rest(
             `leftovers?user_id=eq.${row.user_id}&done_at=is.null&portions_left=gt.0&select=name,portions_left&order=cooked_on.asc&limit=3`,
           );
           if (left.length) {
-            const n = (v: number) => String(Math.round(v * 10) / 10).replace(".", ",");
-            body += ` 🍲 Im Kühlschrank: ${left.map((l) => `${l.name} (${n(Number(l.portions_left))} Port.)`).join(", ")}.`;
+            body += tx.fridge(left.map((l) => `${l.name} (${num(lang, Number(l.portions_left), 1)} ${tx.port})`).join(", "));
           }
         }
       } catch { /* Reste sind nur ein Zusatz */ }
       // Tippen öffnet in der App "Was soll ich essen?" (nur mit KI sichtbar, sonst einfach die App)
-      msgs.push({ title: `🍽️ Zeit für: ${dueMeal.label}`, body, tag: `meal-${day}-${meals.indexOf(dueMeal)}-${dueMeal.meal}`, url: "./?ideen=1" });
+      msgs.push({ title: tx.mealTitle(mealLabel(dueMeal, lang)), body, tag: `meal-${day}-${meals.indexOf(dueMeal)}-${dueMeal.meal}`, url: "./?ideen=1" });
     }
   }
 
@@ -211,8 +259,8 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
     const share = Math.min(1, Math.max(0, (min - wake) / Math.max(60, end - wake)));
     if (ml < goal && ml < goal * share) {
       msgs.push({
-        title: "💧 Zeit für ein Glas Wasser",
-        body: `Heute ${liter(ml)} von ${liter(goal)} l getrunken.`,
+        title: tx.waterTitle,
+        body: tx.waterBody(num(lang, ml / 1000, 1), num(lang, goal / 1000, 1)),
         tag: `water-${day}-${hhmm(dueWater)}`,
       });
     }
@@ -234,12 +282,12 @@ async function remindUser(row: { user_id: string; settings: Settings; tz: string
 
 // Wochenrückblick: sonntags um 18 Uhr (Ortszeit) eine kurze Nachricht ohne Zahlen – die Details stehen in der App
 async function weeklyPush() {
-  const prefs: { user_id: string }[] = await rest("user_prefs?prefs->weekly->>on=eq.true&select=user_id");
+  const prefs: { user_id: string; lang: string | null }[] = await rest("user_prefs?prefs->weekly->>on=eq.true&select=user_id,lang:prefs->>lang");
   if (!prefs.length) return 0;
   const ids = prefs.map((p) => p.user_id).join(",");
   const tzRows: { user_id: string; tz: string }[] = await rest(`reminder_settings?user_id=in.(${ids})&select=user_id,tz`);
   let sent = 0;
-  for (const { user_id } of prefs) {
+  for (const { user_id, lang } of prefs) {
     const tz = tzRows.find((t) => t.user_id === user_id)?.tz || "Europe/Berlin";
     const { day, min } = localNow(tz);
     const weekday = new Date(day + "T12:00:00Z").getUTCDay();
@@ -253,8 +301,8 @@ async function weeklyPush() {
     });
     if (!inserted?.length) continue;
     const res = await sendTo(subs, {
-      title: "🗓️ Dein Wochenrückblick",
-      body: "Eine ruhige Zusammenfassung deiner Woche – tippe zum Ansehen.",
+      title: TXT[asLang(lang)].weeklyTitle,
+      body: TXT[asLang(lang)].weeklyBody,
       tag: `weekly-${day}`,
       url: "./?rueckblick=1",
     });
@@ -309,9 +357,11 @@ Deno.serve(async (req) => {
       const user = await auth.json();
       const subs: Sub[] = await rest(`push_subscriptions?user_id=eq.${user.id}&select=*`);
       if (!subs.length) return out({ error: "Für dieses Konto ist noch kein Gerät angemeldet." });
+      const pr = await rest(`user_prefs?user_id=eq.${user.id}&select=lang:prefs->>lang`).catch(() => []);
+      const tt = TXT[asLang(pr[0]?.lang)];
       const res = await sendTo(subs, {
-        title: "🔔 Test-Erinnerung",
-        body: "So sehen deine Erinnerungen aus. Funktioniert!",
+        title: tt.testTitle,
+        body: tt.testBody,
         tag: "test",
       });
       return out(res);

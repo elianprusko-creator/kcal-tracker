@@ -19,6 +19,7 @@
         .mute { color: var(--mute); font-size: 14px; }
         a { color: var(--accent); }
         ul { padding-left: 20px; }
+        .langsw { font-size: 14px; margin: 0 0 12px; } .langsw a.on { font-weight: 700; text-decoration: none; color: var(--text); }
         .todo { background: var(--warn); border-radius: 8px; padding: 2px 6px; }
         .box { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin: 12px 0; }
         table { border-collapse: collapse; width: 100%; font-size: 14px; }
@@ -27,8 +28,10 @@
 </head>
 <body>
 <main>
+    <p class="langsw"><a href="?lang=de" data-l="de">Deutsch</a> · <a href="?lang=en" data-l="en">English</a></p>
+<div lang="de">
     <h1>Datenschutzerklärung</h1>
-    <p class="mute">Kcal &amp; Protein Tracker · Stand: 25.11.2026</p>
+    <p class="mute">Kcal &amp; Protein Tracker · Stand: 26.11.2026</p>
 
     <div class="box">
         <b>Kurz gesagt:</b> Deine Daten liegen auf einem Server in der EU (Irland) und gehören dir. Es gibt keine Werbung,
@@ -49,8 +52,8 @@
         <tr><td>E-Mail-Adresse, Passwort (nur verschlüsselt als Hash)</td><td>Anmeldung, Passwort zurücksetzen</td></tr>
         <tr><td>Körperdaten: Gewicht, Größe, Alter, Geschlecht, Aktivität, Ziel</td><td>Berechnung deines Kalorien- und Eiweißziels</td></tr>
         <tr><td>Mahlzeiten-Einträge (Name, Menge, Kalorien, Makronährstoffe, Uhrzeit/Mahlzeit), Wasser, Gewichtsverlauf</td><td>Das Tagebuch selbst, Auswertungen und Verlauf</td></tr>
-        <tr><td>Rezepte, Wochenplan, Einkaufsliste, Vorrat, Reste, Vorlieben</td><td>Küchen-Funktionen</td></tr>
-        <tr><td>Erinnerungszeiten und Push-Anmeldung deines Geräts</td><td>Erinnerungen, nur wenn du sie einschaltest</td></tr>
+        <tr><td>Rezepte, Wochenplan, Einkaufsliste, Vorrat, Reste, Essens-Vorlieben</td><td>Küchen-Funktionen und Essensideen</td></tr>
+        <tr><td>Erinnerungszeiten, App-Sprache und Push-Anmeldung deines Geräts</td><td>Erinnerungen, nur wenn du sie einschaltest</td></tr>
     </table>
     <p>
         Angaben zu Ernährung und Körpergewicht können als <b>Gesundheitsdaten</b> gelten (Art. 9 DSGVO). Wir verarbeiten sie
@@ -144,6 +147,140 @@
     </ul>
 
     <p class="mute" style="margin-top: 40px;"><a href="./">← Zur App</a></p>
+</div>
+
+<div lang="en" hidden>
+    <h1>Privacy policy</h1>
+    <p class="mute">Kcal &amp; Protein Tracker · Last updated: 26 Nov 2026</p>
+
+    <div class="box">
+        <b>In short:</b> Your data is stored on a server in the EU (Ireland) and belongs to you. There are no ads,
+        no tracking and no selling of data. The AI feature is optional and only active if you enter your own key.
+        You can export everything at any time and delete your account yourself.
+    </div>
+
+    <h2>1. Controller</h2>
+    <p>
+        <span class="todo">[First and last name]</span><br>
+        <span class="todo">[Street, number, postcode, city, country]</span><br>
+        Email: <span class="todo">[contact email]</span>
+    </p>
+
+    <h2>2. What data is processed</h2>
+    <table>
+        <tr><th>Data</th><th>Purpose</th></tr>
+        <tr><td>Email address, password (stored only as an encrypted hash)</td><td>Sign-in, password reset</td></tr>
+        <tr><td>Body data: weight, height, age, sex, activity, goal</td><td>Calculating your calorie and protein goals</td></tr>
+        <tr><td>Food entries (name, amount, calories, macronutrients, time/meal), water, weight history</td><td>The diary itself, statistics and trends</td></tr>
+        <tr><td>Recipes, weekly plan, shopping list, pantry, leftovers, food preferences</td><td>Kitchen features and meal ideas</td></tr>
+        <tr><td>Reminder times, app language and your device's push registration</td><td>Reminders, only if you turn them on</td></tr>
+    </table>
+    <p>
+        Information about nutrition and body weight may count as <b>health data</b> (Art. 9 GDPR). We process it only
+        because and to the extent that you enter it yourself, based on your <b>explicit consent</b>
+        (Art. 9(2)(a), Art. 6(1)(a) GDPR). Other data is processed to provide the app (Art. 6(1)(b) GDPR).
+        You can withdraw your consent at any time by deleting your account.
+    </p>
+
+    <h3>Only on your device</h3>
+    <p>
+        An offline copy of your data, your Gemini API key, the "plate before" photo and your theme setting are stored only
+        in your browser/phone storage and are not sent to us. Photos are not stored on our server.
+    </p>
+
+    <h2>3. Service providers and recipients</h2>
+    <h3>Supabase (database, sign-in, server functions)</h3>
+    <p>
+        Supabase Inc. runs the database and sign-in for us. The data is stored in a data centre in the EU
+        (AWS, Ireland region). A data processing agreement (Art. 28 GDPR) is in place with Supabase.
+        <span class="todo">[request and sign the DPA in the Supabase dashboard]</span>
+        Technically, every user can only access their own data.
+    </p>
+    <h3>Google Gemini (AI estimates, optional)</h3>
+    <p>
+        Only if you enter your own Gemini API key in the app and use the AI feature, your text or photo (and, for meal
+        ideas, your daily values and food preferences) are sent via our server to Google Ireland Ltd. / Google LLC.
+        The request runs through <b>your</b> Google account and is subject to Google's terms.
+        <b>On the free tier Google may use your inputs to improve its services, and humans may review them.</b>
+        This may involve a transfer to the USA (Google is certified under the EU-US Data Privacy Framework).
+        Without a key, nothing is sent to Google.
+    </p>
+    <h3>Open Food Facts (barcodes and product search)</h3>
+    <p>
+        When you scan a barcode or search for products, the barcode or search term is sent directly from your device to
+        Open Food Facts (a non-profit association in France). Your IP address is transmitted, but no account data.
+    </p>
+    <h3>Hosting the app (GitHub Pages)</h3>
+    <p>
+        The app files are delivered via GitHub Pages (GitHub Inc., USA). GitHub processes your IP address as technically
+        necessary (server logs). Legal basis: legitimate interest in reliable delivery (Art. 6(1)(f) GDPR).
+    </p>
+    <h3>Email delivery (Google Gmail)</h3>
+    <p>
+        Confirmation and password emails are sent via the app's Gmail account (Google Ireland Ltd.). Your email address
+        and the email content (confirmation link) are transmitted to Google. Legal basis: providing the app (Art. 6(1)(b) GDPR).
+    </p>
+    <h3>Your browser's push service</h3>
+    <p>
+        Reminders are delivered via your browser's push service (Chrome/Android: Google Firebase Cloud Messaging).
+        A reminder contains a short text such as "Time for lunch".
+    </p>
+
+    <h2>4. No tracking, no ads</h2>
+    <p>The app uses no analytics or advertising tools, no tracking cookies and does not sell data.</p>
+
+    <h2>5. How long data is kept</h2>
+    <p>
+        As long as your account exists. Deleted entries are gone immediately. If you delete your account, all associated
+        data is removed immediately and permanently; the provider's backups are overwritten on a rolling basis.
+    </p>
+
+    <h2 id="konto-loeschen-en">6. Your rights and deleting your account</h2>
+    <ul>
+        <li><b>Export:</b> in the app under "More" → "Export data" (CSV).</li>
+        <li><b>Delete account:</b> in the app under "More" → "Info &amp; account" → "Delete account and all data", or without
+            the app via <a href="konto-loeschen.html?lang=en">this page</a>.</li>
+        <li>You also have the right to access, rectification, erasure, restriction, data portability, objection and
+            withdrawal of consent. Write to the email address above.</li>
+        <li>You can lodge a complaint with a data protection supervisory authority, e.g. the one where you live.</li>
+    </ul>
+
+    <h2>7. Not a medical device</h2>
+    <p>
+        All nutrition values and goals are estimates. The app does not replace medical or dietary advice.
+        If you have health conditions, are pregnant or have (had) an eating disorder, please talk to a professional first.
+        The app is intended for people aged 18 and over.
+    </p>
+
+    <h2 id="quellen-en">8. Sources &amp; licences</h2>
+    <ul>
+        <li><b>Open Food Facts</b>: product data under the
+            <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">Open Database License (ODbL)</a>,
+            content under <a href="https://creativecommons.org/licenses/by-sa/3.0/" target="_blank" rel="noopener">CC BY-SA</a>.
+            © Open Food Facts contributors, <a href="https://world.openfoodfacts.org" target="_blank" rel="noopener">openfoodfacts.org</a>.</li>
+        <li><b>supabase-js</b>: MIT licence, © Supabase.</li>
+        <li><b>html5-qrcode</b>: Apache License 2.0, © Minhaz.</li>
+    </ul>
+
+    <p class="mute" style="margin-top: 40px;"><a href="./">← Back to the app</a></p>
+</div>
+<script>
+    // Sprache: ?lang=, sonst wie in der App gewählt, sonst Handysprache
+    (function () {
+        let l = new URLSearchParams(location.search).get('lang');
+        try { l = l || localStorage.getItem('lang'); } catch (e) {}
+        l = l || ((navigator.language || 'de').toLowerCase().startsWith('de') ? 'de' : 'en');
+        const show = lang => {
+            document.querySelectorAll('div[lang]').forEach(d => d.hidden = d.lang !== lang);
+            document.documentElement.lang = lang;
+            document.title = lang === 'en' ? 'Privacy policy – Kcal & Protein Tracker' : 'Datenschutz – Kcal & Protein Tracker';
+            document.querySelectorAll('.langsw a').forEach(a => a.classList.toggle('on', a.dataset.l === lang));
+            if (lang === 'en' && location.hash) document.getElementById(location.hash.slice(1) + '-en')?.scrollIntoView();
+        };
+        document.querySelectorAll('.langsw a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.l); }));
+        show(l === 'en' ? 'en' : 'de');
+    })();
+</script>
 </main>
 </body>
 </html>

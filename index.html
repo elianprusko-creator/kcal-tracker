@@ -797,6 +797,17 @@
         <div class="view hidden" data-view="kitchen" id="kitchen-view"></div>
 
         <div class="view hidden" data-view="more">
+        <!-- Sprache -->
+        <div class="card" id="lang-card">
+            <div class="weigh-every-row" style="margin: 0;">
+                <label for="lang-select" style="margin: 0; font-weight: 600; color: var(--text);">🌐 Sprache · Language</label>
+                <select id="lang-select" data-no-i18n>
+                    <option value="de">Deutsch</option>
+                    <option value="en">English</option>
+                </select>
+            </div>
+        </div>
+
         <!-- Gemerkte Gerichte -->
         <details class="card" id="meals-card">
             <summary><h3>Meine Gerichte <span class="sub-text" id="meals-count"></span></h3></summary>
@@ -1207,11 +1218,19 @@
     </div>
 </div>
 
+<script src="i18n.js"></script>
 <script src="vendor/supabase-2.45.4.js"></script>
 <script>
     const SUPABASE_URL = 'https://tzqzgcnacpkzdyvahioo.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    // KI-Antworten in der App-Sprache: jede Anfrage an "estimate" bekommt die Sprache mit
+    {
+        const invoke = supabase.functions.invoke.bind(supabase.functions);
+        supabase.functions.invoke = (name, opts = {}) => name === 'estimate'
+            ? invoke(name, { ...opts, headers: { ...(opts.headers || {}), 'x-lang': APP_LANG } })
+            : invoke(name, opts);
+    }
 
     const $ = id => document.getElementById(id);
 
@@ -1272,11 +1291,11 @@
     function dayLabel(day) {
         if (day === todayStr()) return 'Heute';
         if (day === addDays(todayStr(), -1)) return 'Gestern';
-        return parseDay(day).toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric', month: 'numeric' });
+        return parseDay(day).toLocaleDateString(APP_LOCALE, { weekday: 'short', day: 'numeric', month: 'numeric' });
     }
 
     function fmt(n) {
-        return Math.round(Number(n) || 0).toLocaleString('de-DE');
+        return Math.round(Number(n) || 0).toLocaleString(APP_LOCALE);
     }
 
     function num(value) {
@@ -1486,7 +1505,7 @@
                 // Einwilligung mit Zeitpunkt und Fassung beim Nutzer festhalten (Nachweis, Art. 7 DSGVO)
                 ({ data, error } = await supabase.auth.signUp({
                     email, password,
-                    options: { data: { consent_at: new Date().toISOString(), consent_version: '2026-11-25', adult: true } }
+                    options: { data: { consent_at: new Date().toISOString(), consent_version: '2026-11-25', adult: true, lang: APP_LANG } }
                 }));
                 // Supabase meldet bei bereits vergebener E-Mail keinen Fehler, sondern einen Nutzer ohne Identitäten
                 if (!error && data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
@@ -1610,7 +1629,7 @@
         if (!currentSession) return;
         const typed = prompt('Dein Konto und ALLE Daten (Einträge, Gewicht, Rezepte, Pläne, Erinnerungen) werden endgültig gelöscht. Das lässt sich nicht rückgängig machen.\n\nTipp: Vorher unter „Daten exportieren“ sichern.\n\nZum Bestätigen LÖSCHEN eintippen:');
         if (typed === null) return;
-        if (typed.trim().toUpperCase() !== 'LÖSCHEN' && typed.trim().toUpperCase() !== 'LOESCHEN') {
+        if (!['LÖSCHEN', 'LOESCHEN', 'DELETE'].includes(typed.trim().toUpperCase())) {
             alert('Nicht gelöscht: Bestätigung stimmt nicht.');
             return;
         }
@@ -1636,6 +1655,18 @@
             btn.disabled = false;
             btn.textContent = 'Konto und alle Daten löschen…';
         }
+    });
+
+    // Sprache umschalten: speichern und neu laden (die Texte werden beim Laden übersetzt)
+    $('lang-select').value = APP_LANG;
+    $('lang-select').addEventListener('change', async () => {
+        const lang = $('lang-select').value;
+        setAppLang(lang);
+        if (currentSession) {
+            userPrefs.lang = lang;
+            await savePrefs();
+        }
+        location.reload();
     });
 
     async function startApp() {
@@ -2393,7 +2424,7 @@
             if (!many && d.kcal > 0) svg += `<text class="chart-val" x="${x + barW / 2}" y="${top + plotH - h - 4}" text-anchor="middle">${fmt(d.kcal)}</text>`;
             const date = parseDay(d.day);
             let label = '';
-            if (!many) label = date.toLocaleDateString('de-DE', { weekday: 'short' }).replace('.', '');
+            if (!many) label = date.toLocaleDateString(APP_LOCALE, { weekday: 'short' }).replace('.', '');
             else if ((days.length - 1 - i) % 5 === 0) label = `${date.getDate()}.${date.getMonth() + 1}.`;
             // am rechten Rand rechtsbündig, sonst wird das Datum abgeschnitten
             const anchor = many && i === days.length - 1 ? 'end' : 'middle';
@@ -2432,7 +2463,7 @@
     }
 
     function fmtLiter(ml) {
-        return (ml / 1000).toLocaleString('de-DE', { maximumFractionDigits: 2 });
+        return (ml / 1000).toLocaleString(APP_LOCALE, { maximumFractionDigits: 2 });
     }
 
     function renderWater() {
@@ -2480,7 +2511,7 @@
     // ---------- Gewicht ----------
 
     function fmtKg(kg) {
-        return Number(kg).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        return Number(kg).toLocaleString(APP_LOCALE, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
     }
 
     function fmtDiff(d) {
@@ -2714,7 +2745,7 @@
         const { data, error } = await fetchAllEntries();
         if (error) throw new Error(error.message);
         const time = e => e.created_at
-            ? new Date(e.created_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }) : '';
+            ? new Date(e.created_at).toLocaleTimeString(APP_LOCALE, { hour: '2-digit', minute: '2-digit' }) : '';
         downloadCsv(`kcal-eintraege-${todayStr()}.csv`,
             ['Datum', 'Uhrzeit', 'Mahlzeit', 'Name', 'Menge', 'Gramm', 'kcal', 'Eiweiß g', 'Kohlenhydrate g', 'Fett g', 'Quelle'],
             data.map(e => [e.day, time(e), MEAL_LABEL[entryMeal(e)], e.name, e.amount || '', deNum(e.grams),
@@ -4008,6 +4039,15 @@
         if (!error) {
             applyPrefs(data?.prefs || {});
             writeStore(userKey('prefs'), userPrefs);
+            // Sprache fürs Konto merken (Push-Nachrichten kommen vom Server in dieser Sprache)
+            if (userPrefs.lang !== APP_LANG) {
+                userPrefs.lang = APP_LANG;
+                savePrefs();
+            }
+            // ... und für die Mails (Passwort zurücksetzen usw.) im Nutzerkonto
+            if (currentSession.user.user_metadata?.lang !== APP_LANG) {
+                supabase.auth.updateUser({ data: { lang: APP_LANG } }).catch(() => {});
+            }
         }
         if (kitchen.on) await loadKitchenData();
     }
@@ -4603,7 +4643,7 @@
 
     function renderWeek() {
         const end = addDays(weekStart, 6);
-        const fmtD = d => parseDay(d).toLocaleDateString('de-DE', { day: 'numeric', month: 'numeric' });
+        const fmtD = d => parseDay(d).toLocaleDateString(APP_LOCALE, { day: 'numeric', month: 'numeric' });
         $('week-label').innerText = weekStart === mondayOf(todayStr()) ? `Diese Woche · ${fmtD(weekStart)}–${fmtD(end)}` : `${fmtD(weekStart)} – ${fmtD(end)}`;
         $('week-hint').innerText = recipesList.length
             ? '„Woche füllen“ plant Mittag und Abend mit deinen Rezepten – einmal kochen, mehrmals essen. Frühstück und Snacks trägst du bei Bedarf selbst ein.'
@@ -5039,7 +5079,7 @@
 
     function startSpeech() {
         const rec = new SpeechRec();
-        rec.lang = 'de-DE';
+        rec.lang = APP_LANG === 'en' ? 'en-US' : 'de-DE';
         rec.interimResults = true;
         rec.continuous = false;
         const before = $('food-input').value.trim();
@@ -5950,10 +5990,10 @@
             return;
         }
         remindLoaded = !!data; // noch nie gespeichert -> beim nächsten Öffnen neu nach aktuellem Ziel berechnen
+        const s = data?.settings || {};
         remindWakeToday = s.wakeToday || null;
         wakeToken = data?.wake_token || null;
         renderWake();
-        const s = data?.settings || {};
         $('remind-on').checked = !!data?.enabled;
         $('remind-wake').value = s.wake || '07:00';
         $('remind-sleep').value = s.sleep || '23:00';

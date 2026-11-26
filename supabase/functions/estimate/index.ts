@@ -6,6 +6,11 @@
 //   3. Markenprodukte: Open Food Facts
 //   4. Nur was dann noch unsicher ist: Gemini mit Google-Suche (ein gemeinsamer Aufruf)
 import { findFood, type Food, fromTable, type Item, parseLocal, setFoods, splitInput } from "./parse.ts";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+// Sprache der Anfrage (Header x-lang): bei "en" antwortet die KI auf Englisch
+const LANG_CTX = new AsyncLocalStorage<string>();
+const EN_NOTE = `LANGUAGE: The user reads English. Write every human-readable text value in the JSON (name, title, why, tip, note, amount, ingredient names) in English. Keep the JSON keys exactly as specified. The field "generic" stays a German food name as instructed above.`;
 
 // Tabelle "foods" aus der Datenbank laden, 10 Minuten zwischenspeichern
 let foodsLoadedAt = 0;
@@ -43,7 +48,7 @@ async function loadFoods(apikey: string, authorization: string) {
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-gemini-key",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-gemini-key, x-lang",
 };
 const out = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...CORS, "Content-Type": "application/json" } });
@@ -161,6 +166,7 @@ class KeyInvalidError extends Error {}
 async function gemini(parts: unknown[], opts: GeminiOpts): Promise<{ json: any; sources: Source[] }> {
   const key = opts.key;
   if (!key) throw new NeedKeyError("Dafür brauchst du einen eigenen KI-Schlüssel (Einstellungen → KI-Schlüssel).");
+  if (LANG_CTX.getStore() === "en") parts = [...parts, { text: EN_NOTE }];
   const search = !!opts.search;
   const model = Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest";
   const fallback = Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-lite-latest";
@@ -583,7 +589,7 @@ async function openFoodFacts(a: AiItem): Promise<Item | null> {
   }
 }
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   const started = Date.now();
   let usedOwnKey = false;
@@ -689,4 +695,6 @@ Deno.serve(async (req) => {
       // nur der eigene Schlüssel des Nutzers -> App wechselt in den Suchmodus
       invalid_key: e instanceof KeyInvalidError && usedOwnKey });
   }
-});
+}
+
+Deno.serve((req) => LANG_CTX.run(req.headers.get("x-lang") === "en" ? "en" : "de", () => handle(req)));
