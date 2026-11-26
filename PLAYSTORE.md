@@ -35,7 +35,8 @@ Ohne eigene Domain verlangen Resend und Co. eine Domain bzw. landen im Spam, dah
    - Change email: Betreff `Neue E-Mail bestätigen / Confirm new email – Kcal Tracker` → `email_change.html`
 6. Authentication → Sign In / Providers → Email: „Confirm email“ einschalten (falls aus).
 7. Testen: in der App „Passwort vergessen?“ mit einer eigenen Adresse.
-n## Offen – weitere Aufgaben
+
+## Offen – weitere Aufgaben
 - [ ] Play-Entwicklerkonto (25 $), Identitätsprüfung
 - [ ] TWA bauen (PWABuilder oder Bubblewrap), Keystore sicher aufbewahren, Play App Signing
 - [ ] Geschlossener Test: mind. 12 Tester über 14 Tage
