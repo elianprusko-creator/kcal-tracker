@@ -1,7 +1,7 @@
 // Offline-Modus: App-Dateien zwischenspeichern, damit die App auch ohne Netz startet.
 // Daten (Supabase, Open Food Facts, KI) laufen NICHT über diesen Cache.
 // Nach Änderungen an dieser Datei die Versionsnummer erhöhen.
-const CACHE = 'kcal-v8';
+const CACHE = 'kcal-v9';
 const LOCAL = ['./', './index.html', './manifest.webmanifest', './icon.svg', './icon-192.png', './icon-512.png',
     './vendor/supabase-2.45.4.js', './i18n.js'];
 // Nur für Scanner bzw. Info nötig: ein Fehler hier darf die Installation nicht abbrechen
@@ -51,7 +51,7 @@ self.addEventListener('fetch', (event) => {
     if (req.mode === 'navigate') {
         event.respondWith((async () => {
             try {
-                const res = await fetch(req);
+                const res = await fetch(req, { cache: 'no-cache' });   // nicht aus dem HTTP-Cache, sonst kommen Updates erst Minuten später
                 if (res.ok) {
                     const cache = await caches.open(CACHE);
                     await cache.put('./index.html', res.clone());
@@ -65,7 +65,7 @@ self.addEventListener('fetch', (event) => {
     }
 
     // Icons, Manifest und Bibliotheken: sofort aus dem Cache, im Hintergrund aktualisieren
-    const isStatic = (url.origin === self.location.origin && !url.pathname.endsWith('sw.js')) ;
+    const isStatic = url.origin === self.location.origin && !url.pathname.endsWith('sw.js') && !url.pathname.endsWith('version.json');
     if (!isStatic) return;
     event.respondWith((async () => {
         const cache = await caches.open(CACHE);
@@ -107,6 +107,7 @@ self.addEventListener('notificationclick', (event) => {
             // Essens-Erinnerung: in der offenen App direkt die Essensideen zeigen
             if (url.includes('ideen=1')) open.postMessage({ open: 'ideas' });
             if (url.includes('rueckblick=1')) open.postMessage({ open: 'weekly' });
+            if (url.includes('meldungen=1')) open.postMessage({ open: 'inbox' });
             return;
         }
         return clients.openWindow(url);

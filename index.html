@@ -198,6 +198,11 @@
         .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
         .chip { border: 1px solid var(--border); background: var(--field); color: var(--text); border-radius: 16px; padding: 6px 10px; font-size: 13px; cursor: pointer; }
         .chip.active { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+        .inbox-item { border-top: 1px solid var(--border); padding: 10px 0; }
+        .inbox-item .msg { white-space: pre-wrap; margin: 4px 0 6px; color: var(--text); }
+        .inbox-item .meta { font-size: 12px; color: var(--mute); word-break: break-word; }
+        .inbox-item .chips { margin-top: 6px; }
+        .inbox-item.st-erledigt .msg, .inbox-item.st-abgelehnt .msg { opacity: 0.55; }
 
         /* Gerichte */
         .meal-save { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
@@ -1046,6 +1051,16 @@
             </div>
         </details>
 
+        <!-- Nur für Admins: eingegangene Meldungen -->
+        <details class="card hidden" id="inbox-card" data-no-i18n>
+            <summary><h3>📬 Meldungen <span id="inbox-count" class="sub-text"></span></h3></summary>
+            <div class="chips" id="inbox-filter" style="margin: 8px 0 4px;">
+                <button type="button" class="chip active" data-v="offen">Offen</button>
+                <button type="button" class="chip" data-v="alle">Alle</button>
+            </div>
+            <div id="inbox-list"></div>
+        </details>
+
         <!-- Feedback: Fehler melden, Ideen -->
         <details class="card" id="feedback-card">
             <summary><h3>💬 Fehler melden &amp; Ideen</h3></summary>
@@ -1239,7 +1254,8 @@
 <script src="vendor/supabase-2.45.4.js"></script>
 <script>
     // Für Fehlerberichte: Version und die letzten Fehlermeldungen (nur Technik, keine Inhalte)
-    const APP_VERSION = '2026-11-26';
+    // Bei jeder Änderung hochzählen UND version.json gleich setzen: daran erkennt die installierte App ein Update
+    const APP_VERSION = '2026-11-26.2';
     const recentErrors = [];
     const noteError = (msg) => {
         recentErrors.push({ at: new Date().toISOString(), msg: String(msg).slice(0, 300) });
@@ -1709,6 +1725,8 @@
             online: navigator.onLine, ai: aiMode,
             errors: kind === 'bug' ? recentErrors.slice(-8) : []
         };
+        // Für Rückfragen: die E-Mail nur mitschicken, wenn es ausdrücklich erlaubt ist
+        if ($('feedback-contact').checked) context.email = currentSession.user.email;
         const btn = $('feedback-send-btn');
         btn.disabled = true;
         const { error } = await supabase.from('feedback').insert({
@@ -1722,7 +1740,92 @@
         $('feedback-text').value = '';
         $('feedback-contact').checked = false;
         showToast(kind === 'bug' ? 'Danke! Der Fehler ist gemeldet.' : 'Danke für die Idee!');
+        if (isAdmin) loadInbox();
     });
+
+    // ---------- Meldungen lesen (nur Admins, siehe Tabelle app_admins) ----------
+    let isAdmin = false, inboxRows = [];
+    const INBOX_STATUS = { neu: '🆕 neu', in_arbeit: '🔧 in Arbeit', erledigt: '✅ erledigt', abgelehnt: '✖️ abgelehnt' };
+
+    async function loadInbox() {
+        if (!currentSession) return;
+        if (!isAdmin) {
+            const { data } = await supabase.from('app_admins').select('user_id').eq('user_id', currentSession.user.id).maybeSingle();
+            isAdmin = !!data;
+            if (!isAdmin) return;
+        }
+        const { data, error } = await supabase.from('feedback')
+            .select('id,created_at,kind,message,contact_ok,context,status')
+            .order('created_at', { ascending: false }).limit(200);
+        if (error) return;
+        inboxRows = data || [];
+        $('inbox-card').classList.remove('hidden');
+        renderInbox();
+    }
+
+    function renderInbox() {
+        const open = inboxRows.filter(r => r.status === 'neu' || r.status === 'in_arbeit');
+        const fresh = inboxRows.filter(r => r.status === 'neu');
+        $('inbox-count').textContent = fresh.length ? `· ${fresh.length} neu` : (open.length ? `· ${open.length} offen` : '');
+        // Punkt auf "Mehr", solange es neue Meldungen gibt, die noch nicht angeschaut wurden
+        const seen = localStorage.getItem(userKey('inboxSeen')) || '';
+        document.querySelector('#tabs button[data-view="more"]').classList.toggle('has-dot', fresh.some(r => r.created_at > seen));
+        const all = $('inbox-filter').querySelector('.chip.active')?.dataset.v === 'alle';
+        const list = all ? inboxRows : open;
+        $('inbox-list').innerHTML = list.length ? list.map(r => {
+            const c = r.context || {};
+            const ua = c.ua || '';
+            const when = new Date(r.created_at).toLocaleString(APP_LOCALE, { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+            const device = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'Mac' : '';
+            const meta = [c.version && 'v' + c.version, c.lang, c.view && 'Ansicht: ' + c.view, device,
+                c.installed ? 'installiert' : 'Browser', c.screen, c.online === false && 'offline'].filter(Boolean).join(' · ');
+            const errs = (c.errors || []).map(e => `<div class="meta" style="color: var(--danger);">⚠ ${esc(typeof e === 'string' ? e : JSON.stringify(e))}</div>`).join('');
+            const mail = r.contact_ok && c.email
+                ? `<div class="meta">✉️ <a href="mailto:${esc(c.email)}?subject=${encodeURIComponent('Deine Meldung an Kcal Tracker')}">${esc(c.email)}</a></div>`
+                : (r.contact_ok ? '<div class="meta">✉️ Rückfrage erlaubt</div>' : '');
+            const btns = Object.keys(INBOX_STATUS).filter(k => k !== r.status)
+                .map(k => `<button type="button" class="chip" data-id="${r.id}" data-st="${k}">${INBOX_STATUS[k]}</button>`).join('');
+            return `<div class="inbox-item st-${esc(r.status)}">
+                <div class="meta">${r.kind === 'bug' ? '🐞 Fehler' : '💡 Idee'} · ${esc(when)} · <b>${esc(INBOX_STATUS[r.status] || r.status)}</b></div>
+                <div class="msg">${esc(r.message)}</div>
+                <div class="meta">${esc(meta)}</div>${errs}${mail}
+                <div class="chips">${btns}</div>
+            </div>`;
+        }).join('') : '<p class="sub-text" style="margin: 8px 0 0;">Keine offenen Meldungen. 🎉</p>';
+    }
+
+    $('inbox-card').addEventListener('toggle', () => {
+        if (!$('inbox-card').open || !inboxRows.length) return;
+        localStorage.setItem(userKey('inboxSeen'), inboxRows[0].created_at);
+        renderInbox();
+    });
+    $('inbox-filter').addEventListener('click', (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        $('inbox-filter').querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+        renderInbox();
+    });
+    $('inbox-list').addEventListener('click', async (event) => {
+        const btn = event.target.closest('button[data-st]');
+        if (!btn) return;
+        const id = Number(btn.dataset.id), status = btn.dataset.st;
+        btn.disabled = true;
+        const { error } = await supabase.from('feedback').update({ status }).eq('id', id);
+        if (error) { btn.disabled = false; return alert('Nicht gespeichert: ' + error.message); }
+        const row = inboxRows.find(r => r.id === id);
+        if (row) row.status = status;
+        renderInbox();
+    });
+
+    // Aus der Push-Nachricht "Neue Meldung": Mehr öffnen und die Meldungen aufklappen
+    function openInbox() {
+        loadInbox().then(() => {
+            if (!isAdmin) return;
+            showView('more');
+            $('inbox-card').open = true;
+            $('inbox-card').scrollIntoView({ behavior: 'smooth' });
+        });
+    }
 
     // Sprache umschalten: speichern und neu laden (die Texte werden beim Laden übersetzt)
     $('lang-select').value = APP_LANG;
@@ -1768,6 +1871,7 @@
         refreshAiMode();
         loadKitchen();
         loadReminders();
+        loadInbox();
         if (!profile || !profile.kcal_goal) {
             showOnboarding();
         } else {
@@ -1927,6 +2031,10 @@
         if (/[?&]rueckblick=1/.test(location.search)) {
             history.replaceState(null, '', location.pathname);
             setTimeout(() => { showView('progress'); $('weekly-card').scrollIntoView({ behavior: 'smooth' }); }, 600);
+        }
+        if (/[?&]meldungen=1/.test(location.search)) {
+            history.replaceState(null, '', location.pathname);
+            setTimeout(openInbox, 600);
         }
         if (/[?&]ideen=1/.test(location.search)) {
             history.replaceState(null, '', location.pathname);
@@ -5457,6 +5565,7 @@
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.addEventListener('message', (event) => {
             if (event.data?.open === 'ideas') openIdeasFromNotification();
+            if (event.data?.open === 'inbox') openInbox();
             if (event.data?.open === 'weekly') { showView('progress'); $('weekly-card').scrollIntoView({ behavior: 'smooth' }); }
         });
     }
@@ -6203,11 +6312,37 @@
         navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service Worker:', err));
     }
 
+    // Neue Version online? Die installierte App wird oft nur aus dem Hintergrund fortgesetzt und nie neu geladen.
+    // Darum beim Zurückkehren (höchstens alle 5 Minuten) version.json prüfen und dann neu laden –
+    // aber nur, wenn gerade nichts offen ist oder getippt wird; sonst ein Hinweis zum Antippen.
+    let lastUpdateCheck = 0;
+    async function checkForUpdate() {
+        if (!navigator.onLine || Date.now() - lastUpdateCheck < 5 * 60 * 1000) return;
+        lastUpdateCheck = Date.now();
+        try {
+            const res = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+            const v = res.ok ? (await res.json()).version : null;
+            if (!v || v === APP_VERSION) return;
+            const busy = document.querySelector('.sheet:not(.hidden)')
+                || ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName);
+            if (!busy) return location.reload();
+            showToast('Neue Version verfügbar – tippe hier zum Aktualisieren');
+            $('toast')?.addEventListener('click', () => location.reload(), { once: true });
+        } catch (e) { /* offline o. Ä.: beim nächsten Mal */ }
+    }
+    if (location.protocol === 'https:') {
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkForUpdate();
+        });
+        setTimeout(checkForUpdate, 5000);
+    }
+
     // Beim Zurückkehren in die App: Tag wechseln, falls Mitternacht vorbei ist, und Warteschlange hochladen
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState !== 'visible' || !currentSession || !profile) return;
         flushPending();
         flushWater();
+        if (isAdmin) loadInbox();
         if ($('app').classList.contains('hidden')) return;
         const today = todayStr();
         // nur wenn "Heute" angezeigt wurde und keine Vorschau offen ist

@@ -311,6 +311,32 @@ async function weeklyPush() {
   return sent;
 }
 
+// Neue Meldungen aus der App (Fehler/Ideen): Push an die Admins, jede Meldung nur einmal
+async function feedbackPush() {
+  const rows: { id: number; kind: string; message: string }[] =
+    await rest("feedback?notified_at=is.null&select=id,kind,message&order=created_at.asc&limit=20");
+  if (!rows.length) return 0;
+  // zuerst vermerken, damit ein paralleler Lauf nichts doppelt schickt
+  await rest(`feedback?id=in.(${rows.map((r) => r.id).join(",")})`, {
+    method: "PATCH", body: JSON.stringify({ notified_at: new Date().toISOString() }),
+  });
+  const admins: { user_id: string }[] = await rest("app_admins?select=user_id");
+  if (!admins.length) return 0;
+  const subs: Sub[] = await rest(`push_subscriptions?user_id=in.(${admins.map((a) => a.user_id).join(",")})&select=*`);
+  if (!subs.length) return 0;
+  const bugs = rows.filter((r) => r.kind === "bug").length;
+  const first = rows[0];
+  const res = await sendTo(subs, {
+    title: rows.length === 1
+      ? (first.kind === "bug" ? "🐞 Neue Fehlermeldung" : "💡 Neue Idee")
+      : `📬 ${rows.length} neue Meldungen (${bugs} Fehler)`,
+    body: first.message.slice(0, 140),
+    tag: "feedback",
+    url: "./?meldungen=1",
+  });
+  return res.sent;
+}
+
 // "Bin wach": erstes Signal des Tages zwischen 3 und 14 Uhr zählt (Schlummern/Entsperren ändern nichts mehr)
 async function setWake(filter: string) {
   const rows: { user_id: string; settings: Settings; tz: string }[] = await rest(`reminder_settings?${filter}&select=user_id,settings,tz`);
@@ -373,7 +399,8 @@ Deno.serve(async (req) => {
       remindUser(r).catch((e) => ({ error: (e as Error).message }))
     ));
     const weekly = await weeklyPush().catch((e) => ({ error: (e as Error).message }));
-    return out({ users: rows.length, results: results.filter(Boolean), weekly });
+    const feedback = await feedbackPush().catch((e) => ({ error: (e as Error).message }));
+    return out({ users: rows.length, results: results.filter(Boolean), weekly, feedback });
   } catch (e) {
     console.error(e);
     return out({ error: (e as Error).message }, 500);
