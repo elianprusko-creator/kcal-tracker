@@ -227,7 +227,13 @@ const ADVICE_RULES = `Ton: freundlich, sachlich, ohne Moral. Keine Verbote, kein
 "Cheat", kein schlechtes Gewissen. Nie zu sehr wenig Essen raten. Ist das Kalorienziel schon erreicht und jemand hat Hunger,
 dann eine leichte, sättigende, eiweißreiche Option vorschlagen – sachlich, ohne Vorwurf.
 Training: 1–3 h vorher leicht verdaulich und kohlenhydratbetont (wenig Fett und Ballaststoffe); danach Eiweiß plus Kohlenhydrate.
-Ist noch viel Eiweiß offen, eiweißreiche Optionen bevorzugen. Nährwerte realistisch schätzen, inkl. Öl/Soße.`;
+Ist noch viel Eiweiß offen, eiweißreiche Optionen bevorzugen. Nährwerte realistisch schätzen, inkl. Öl/Soße.
+VORLIEBEN (Kontext "vorlieben"): "ernaehrung" und "unvertraeglich_oder_isst_nicht" sind STRIKTE Regeln und gelten für jede
+Zutat, Beilage, Soße und Brühe – nie verletzen, auch nicht bei Resten, häufig Gegessenem oder Rezepten (die dann weglassen).
+Bei Laktose/Gluten nur Varianten ohne bzw. ausdrücklich laktosefrei/glutenfrei. "mag_nicht" und "vorschlaege_abgelehnt" vermeiden
+(auch sehr ähnliche Gerichte). Bevorzugen: "mag_besonders", "lieblingskuechen", "typisch_zu_dieser_mahlzeit",
+"vorschlaege_gern_genommen" – aber abwechseln und nicht genau das wiederholen, was in "zuletzt_gegessen" steht (Reste ausgenommen).
+"aufwand" beachten.`;
 
 const SUGGEST_PROMPT = `Du bist ein Ernährungscoach. Schlage genau 3 konkrete Mahlzeiten oder Snacks für JETZT vor, passend zum Kontext (JSON unten).
 Richtwert pro Vorschlag: die offenen Werte geteilt durch die heute noch übrigen Mahlzeiten (mahlzeiten_uebrig).
@@ -242,6 +248,8 @@ zu Ziel und offenen Werten der Person passen (Kontext-JSON unten). Schätze die 
 (inkl. Öl, Soße, Beilage). Gib zu jedem einen kurzen Grund und optional einen praktischen Tipp (z. B. "Soße extra",
 "Pommes gegen Salat tauschen", "halbe Portion Reis").
 Ist keine Speisekarte erkennbar, gib leere picks und schreibe das in note.
+Gerichte, die gegen Ernährungsform oder Unverträglichkeiten verstoßen, nur wählen, wenn man sie sicher anpassen kann (dann in tip,
+z. B. "ohne Speck bestellen"); passt nichts, das ehrlich in note sagen.
 ${ADVICE_RULES}
 Antwort als JSON: {"picks":[{"name":"Name wie auf der Karte","why":"","tip":"","grams":0,"kcal":0,"protein_g":0,"carbs_g":0,"fat_g":0}],
 "note":"kurz, optional"}`;

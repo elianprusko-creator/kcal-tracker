@@ -1055,8 +1055,63 @@
     <div class="sheet-box card">
         <div class="card-head">
             <h3 id="ideas-title" style="margin: 0;">💡 Was soll ich essen?</h3>
-            <button class="icon-btn" id="ideas-close-btn" title="Schließen">✕</button>
+            <div>
+                <button class="icon-btn" id="ideas-prefs-btn" title="Vorlieben" style="font-size: 13px;">Vorlieben</button>
+                <button class="icon-btn" id="ideas-close-btn" title="Schließen">✕</button>
+            </div>
         </div>
+
+        <!-- Vorlieben: beim ersten Mal Pflicht, danach jederzeit änderbar -->
+        <div id="ideas-prefs" class="hidden">
+            <p class="preview-note" id="prefs-intro" style="margin: 8px 0 10px;">Ein paar Fragen, damit die Vorschläge zu dir passen. Dauert 30 Sekunden.</p>
+            <label style="margin: 0 0 6px;">Wie isst du?</label>
+            <div class="chips" id="prefs-diet">
+                <button type="button" class="chip" data-v="alles">Alles</button>
+                <button type="button" class="chip" data-v="flexi">Wenig Fleisch</button>
+                <button type="button" class="chip" data-v="pesce">Pescetarisch</button>
+                <button type="button" class="chip" data-v="vegetarisch">Vegetarisch</button>
+                <button type="button" class="chip" data-v="vegan">Vegan</button>
+            </div>
+            <label style="margin: 0 0 6px;">Verträgst oder isst du nicht? <span class="sub-text">(mehrere möglich)</span></label>
+            <div class="chips" id="prefs-avoid">
+                <button type="button" class="chip" data-v="Laktose">Laktose</button>
+                <button type="button" class="chip" data-v="Gluten">Gluten</button>
+                <button type="button" class="chip" data-v="Nüsse">Nüsse</button>
+                <button type="button" class="chip" data-v="Erdnüsse">Erdnüsse</button>
+                <button type="button" class="chip" data-v="Eier">Eier</button>
+                <button type="button" class="chip" data-v="Fisch">Fisch</button>
+                <button type="button" class="chip" data-v="Meeresfrüchte">Meeresfrüchte</button>
+                <button type="button" class="chip" data-v="Soja">Soja</button>
+                <button type="button" class="chip" data-v="Schweinefleisch">Schwein</button>
+                <button type="button" class="chip" data-v="Scharfes">Scharfes</button>
+            </div>
+            <label style="margin: 0 0 6px;">Was isst du gern? <span class="sub-text">(mehrere möglich)</span></label>
+            <div class="chips" id="prefs-cuisines">
+                <button type="button" class="chip" data-v="Hausmannskost">Hausmannskost</button>
+                <button type="button" class="chip" data-v="Italienisch">Italienisch</button>
+                <button type="button" class="chip" data-v="Mediterran">Mediterran</button>
+                <button type="button" class="chip" data-v="Asiatisch">Asiatisch</button>
+                <button type="button" class="chip" data-v="Indisch">Indisch</button>
+                <button type="button" class="chip" data-v="Orientalisch">Orientalisch</button>
+                <button type="button" class="chip" data-v="Mexikanisch">Mexikanisch</button>
+            </div>
+            <label for="prefs-likes" style="margin: 0 0 4px;">Besonders gern</label>
+            <input type="text" id="prefs-likes" placeholder="z. B. Hähnchen, Skyr, Reis, Beeren" maxlength="200">
+            <label for="prefs-dislikes" style="margin: 0 0 4px;">Mag ich gar nicht</label>
+            <input type="text" id="prefs-dislikes" placeholder="z. B. Pilze, Koriander, Oliven" maxlength="200">
+            <label style="margin: 0 0 6px;">Wie viel Aufwand?</label>
+            <div class="chips" id="prefs-effort">
+                <button type="button" class="chip" data-v="schnell">Schnell (bis 15 Min.)</button>
+                <button type="button" class="chip" data-v="normal">Darf auch mal länger</button>
+                <button type="button" class="chip" data-v="gern">Ich koche gern</button>
+            </div>
+            <div class="row" style="margin-top: 6px;">
+                <button type="button" class="btn" id="prefs-save-btn">Speichern</button>
+            </div>
+            <p class="preview-note" style="margin: 8px 0 0;">Ernährungsform und Unverträglichkeiten hält die KI strikt ein. Außerdem lernt sie mit: was du oft isst, welche Vorschläge du nimmst und welche du mit 👎 ablehnst.</p>
+        </div>
+
+        <div id="ideas-main">
         <p class="preview-note" id="ideas-context" style="margin: 8px 0 10px;"></p>
         <label style="margin: 0 0 6px;">Training heute?</label>
         <div class="chips" id="ideas-training">
@@ -1069,6 +1124,7 @@
             <label for="menu-input" class="btn btn-sec" style="text-align: center;">📋 Speisekarte</label>
         </div>
         <div id="ideas-results"></div>
+        </div>
     </div>
 </div>
 
@@ -1787,7 +1843,7 @@
             supabase.from('foods').select('*').order('name'),
             supabase.from('meals').select('*').order('created_at', { ascending: false }),
             supabase.from('entries')
-                .select('name, amount, grams, kcal, protein_g, carbs_g, fat_g, source, created_at')
+                .select('name, amount, grams, kcal, protein_g, carbs_g, fat_g, source, created_at, meal, day')
                 .eq('user_id', currentSession.user.id)
                 .order('created_at', { ascending: false })
                 .limit(1000)
@@ -5057,12 +5113,118 @@
             vorrat: kitchen.on ? pantryList.filter(p => p.level !== 'leer').map(p => p.name).slice(0, 30) : [],
             reste: kitchen.on ? leftoversList.map(l => ({ name: l.name, portionen: Number(l.portions_left), kcal_pro_portion: Number(l.kcal), eiweiss_pro_portion: Number(l.protein_g) })) : [],
             rezepte: kitchen.on ? recipesList.map(r => r.name) : [],
-            haeufig: top
+            haeufig: top,
+            ...learnedContext()
         };
     }
 
+    // ---------- Essens-Vorlieben (für Ideen und Speisekarte) ----------
+    // userPrefs.food = { setup, diet, avoid[], cuisines[], likes, dislikes, effort, yes[], nope[] }
+    const DIET_TEXT = {
+        alles: 'isst alles',
+        flexi: 'isst wenig Fleisch (Fleisch höchstens selten vorschlagen)',
+        pesce: 'pescetarisch: kein Fleisch, Fisch und Meeresfrüchte sind ok',
+        vegetarisch: 'vegetarisch: kein Fleisch, kein Fisch, keine Meeresfrüchte, keine Gelatine',
+        vegan: 'vegan: keinerlei tierische Produkte (kein Fleisch, Fisch, Milchprodukte, Eier, Honig, Gelatine)'
+    };
+    const EFFORT_TEXT = { schnell: 'schnell, höchstens 15 Minuten', normal: 'darf auch mal 30 Minuten dauern', gern: 'kocht gern, auch aufwendiger' };
+    const foodPrefs = () => ({ diet: 'alles', avoid: [], cuisines: [], likes: '', dislikes: '', effort: 'schnell', yes: [], nope: [], ...(userPrefs.food || {}) });
+
+    // Was die App aus dem Verhalten lernt: typische Speisen zu dieser Mahlzeit, zuletzt Gegessenes, Reaktionen auf Vorschläge
+    function learnedContext() {
+        const f = foodPrefs();
+        const meal = mealOfTime();
+        const atMeal = new Map();
+        const recent = new Set();
+        const since = addDays(todayStr(), -2);
+        for (const h of historyMap.values()) {
+            const e = h.last;
+            if (e.meal === meal) atMeal.set(e.name, (atMeal.get(e.name) || 0) + h.count);
+            if (e.day && e.day >= since) recent.add(e.name);
+        }
+        return {
+            vorlieben: {
+                ernaehrung: DIET_TEXT[f.diet] || DIET_TEXT.alles,
+                unvertraeglich_oder_isst_nicht: f.avoid,
+                lieblingskuechen: f.cuisines,
+                mag_besonders: f.likes,
+                mag_nicht: f.dislikes,
+                aufwand: EFFORT_TEXT[f.effort] || EFFORT_TEXT.schnell
+            },
+            typisch_zu_dieser_mahlzeit: [...atMeal.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([n]) => n),
+            zuletzt_gegessen: [...recent].slice(0, 15),
+            vorschlaege_gern_genommen: f.yes.slice(-15),
+            vorschlaege_abgelehnt: f.nope.slice(-30)
+        };
+    }
+
+    function rememberIdea(kind, title) {
+        const f = foodPrefs();
+        const list = f[kind].filter(t => t !== title).concat(title).slice(kind === 'yes' ? -20 : -40);
+        userPrefs.food = { ...f, [kind]: list };
+        savePrefs();
+    }
+
+    function setChips(id, values) {
+        $(id).querySelectorAll('.chip').forEach(c => c.classList.toggle('active', values.includes(c.dataset.v)));
+    }
+    const chipValues = id => [...$(id).querySelectorAll('.chip.active')].map(c => c.dataset.v);
+
+    function showPrefs(first) {
+        const f = foodPrefs();
+        setChips('prefs-diet', [f.diet]);
+        setChips('prefs-avoid', f.avoid);
+        setChips('prefs-cuisines', f.cuisines);
+        setChips('prefs-effort', [f.effort]);
+        $('prefs-likes').value = f.likes;
+        $('prefs-dislikes').value = f.dislikes;
+        $('prefs-intro').innerText = first
+            ? 'Bevor es losgeht: ein paar Fragen, damit die Vorschläge zu dir passen. Dauert 30 Sekunden.'
+            : 'Deine Vorlieben. Änderungen gelten ab dem nächsten Vorschlag.';
+        $('ideas-prefs').classList.remove('hidden');
+        $('ideas-main').classList.add('hidden');
+    }
+
+    function hidePrefs() {
+        $('ideas-prefs').classList.add('hidden');
+        $('ideas-main').classList.remove('hidden');
+    }
+
+    $('ideas-prefs').addEventListener('click', (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        const group = chip.parentElement;
+        if (group.id === 'prefs-diet' || group.id === 'prefs-effort') {
+            group.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+        } else {
+            chip.classList.toggle('active');
+        }
+    });
+
+    $('prefs-save-btn').addEventListener('click', () => {
+        const f = foodPrefs();
+        userPrefs.food = {
+            ...f, setup: true,
+            diet: chipValues('prefs-diet')[0] || 'alles',
+            avoid: chipValues('prefs-avoid'),
+            cuisines: chipValues('prefs-cuisines'),
+            effort: chipValues('prefs-effort')[0] || 'schnell',
+            likes: $('prefs-likes').value.trim().slice(0, 200),
+            dislikes: $('prefs-dislikes').value.trim().slice(0, 200)
+        };
+        savePrefs();
+        hidePrefs();
+        $('ideas-results').innerHTML = '';
+        showToast('Vorlieben gespeichert');
+    });
+    $('ideas-prefs-btn').addEventListener('click', () => {
+        if ($('ideas-prefs').classList.contains('hidden')) showPrefs(false);
+        else if (userPrefs.food?.setup) hidePrefs();
+    });
+
     function openIdeas() {
         if (!hasAi()) return openAiCard();
+        if (userPrefs.food?.setup) hidePrefs(); else showPrefs(true);
         const c = adviceContext();
         $('ideas-context').innerText = c.offen.kcal > 0
             ? `Heute noch offen: ${fmt(c.offen.kcal)} kcal · ${fmt(Math.max(0, c.offen.protein_g))} g Eiweiß · gerade: ${c.mahlzeit}`
@@ -5109,7 +5271,10 @@
                         <div class="idea-head"><span class="idea-title">${esc(s.title)}</span><span class="sub-text">${fmt(sum('kcal'))} kcal · ${fmt(sum('protein_g'))} g Eiweiß</span></div>
                         <div class="idea-why">${esc(s.why)}</div>
                         <div class="idea-items">${s.items.map(it => esc(`${it.amount} ${it.name}`)).join(' · ')}</div>
-                        <button type="button" class="btn btn-small" data-idea="${i}">Das esse ich</button>
+                        <div class="row" style="margin-top: 8px;">
+                            <button type="button" class="btn btn-small" data-idea="${i}">Das esse ich</button>
+                            <button type="button" class="btn btn-small btn-sec" data-nope="${i}" style="flex: 0 0 auto;" title="Nicht mein Fall – nicht mehr vorschlagen">👎</button>
+                        </div>
                     </div>`;
             }).join('');
         } catch (err) {
@@ -5121,6 +5286,7 @@
 
     async function checkMenu(file) {
         openIdeas();
+        hidePrefs();   // Speisekarte geht auch ohne ausgefüllte Vorlieben
         $('attach-menu').classList.add('hidden');
         ideasLoading('Lese die Speisekarte …');
         try {
@@ -5152,8 +5318,17 @@
         if (pick) {
             const s = ideasData[Number(pick.dataset.idea)];
             if (!s) return;
+            rememberIdea('yes', s.title);
             closeIdeas();
             showPreview(s.items, [], { allowMeal: s.items.length > 1, text: s.title });
+        }
+        const nope = event.target.closest('[data-nope]');
+        if (nope) {
+            const s = ideasData[Number(nope.dataset.nope)];
+            if (!s) return;
+            rememberIdea('nope', s.title);
+            nope.closest('.idea').remove();
+            showToast('Gemerkt, kommt nicht mehr.');
         }
         const chip = event.target.closest('[data-training]');
         if (chip) {
