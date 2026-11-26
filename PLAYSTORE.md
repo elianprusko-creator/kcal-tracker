@@ -16,8 +16,8 @@
 - [ ] KI-Modell: freiwillig mit eigenem Schlüssel (jetzt) / Premium mit bezahltem Server-Schlüssel / ohne KI
 
 ## Offen – Aufgaben
-- [ ] In `datenschutz.html` die gelb markierten Platzhalter ausfüllen (Name, Anschrift, E-Mail)
-- [ ] Supabase: Auftragsverarbeitungsvertrag (DPA) im Dashboard anfordern
+- [x] Datenschutzerklärung: Name + Kontakt-E-Mail eingetragen (ohne Wohnadresse)
+- [ ] **Supabase: Auftragsverarbeitungsvertrag (DPA) im Dashboard anfordern** – die Datenschutzerklärung sagt schon, dass er besteht
 - [ ] Supabase: eigenes SMTP über ein eigenes Gmail-Konto der App (siehe unten)
 
 ## E-Mail-Versand einrichten (Gmail, kostenlos, ca. 500 Mails/Tag)
@@ -43,3 +43,14 @@ Ohne eigene Domain verlangen Resend und Co. eine Domain bzw. landen im Spam, dah
 - [ ] Store-Eintrag: Icon 512, Feature-Grafik 1024×500, Screenshots, Beschreibung
 - [ ] Formulare: Datensicherheit, Gesundheits-App-Erklärung, Altersfreigabe, Zielgruppe 18+
 - [ ] Später bei Einnahmen: Impressum (§ 5 DDG), Google Play Billing
+
+## Website
+- [x] Landingpage `website/` (Englisch, Umschalter Deutsch), Screenshots aus einem Demo-Konto in `website/img/`
+      Vorschau: https://elianprusko-creator.github.io/kcal-tracker/website/
+- [ ] Beim Umzug auf Netlify: Landingpage auf `/`, App z. B. unter `/app/` (Supabase-Redirect-URLs anpassen)
+
+## Feedback
+- [x] „Fehler melden & Ideen“ unter „Mehr“ → Tabelle `feedback` (Supabase → Table Editor → feedback, Spalte `status` zum Abhaken)
+
+## Ideen für später
+- [ ] Anmelde-Stopp ab X Nutzern + Warteliste (Tabelle `waitlist`, Zähler im Dashboard, Freischalten per Klick)

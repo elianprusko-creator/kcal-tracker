@@ -1046,6 +1046,23 @@
             </div>
         </details>
 
+        <!-- Feedback: Fehler melden, Ideen -->
+        <details class="card" id="feedback-card">
+            <summary><h3>💬 Fehler melden &amp; Ideen</h3></summary>
+            <p class="sub-text" style="margin: 8px 0 10px;">Etwas klappt nicht oder du hast eine Idee? Schreib's hier rein – jede Nachricht wird gelesen.</p>
+            <div class="chips" id="feedback-kind">
+                <button type="button" class="chip active" data-v="bug">🐞 Fehler</button>
+                <button type="button" class="chip" data-v="idee">💡 Idee</button>
+            </div>
+            <textarea id="feedback-text" rows="4" maxlength="2000" placeholder="Was ist passiert bzw. was wünschst du dir?" style="width: 100%; box-sizing: border-box; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--field); color: var(--text); resize: vertical;"></textarea>
+            <label class="consent-row" style="margin-top: 8px;">
+                <input type="checkbox" id="feedback-contact">
+                <span>Du darfst mir bei Rückfragen an meine Konto-E-Mail schreiben.</span>
+            </label>
+            <button type="button" class="btn" id="feedback-send-btn">Senden</button>
+            <p class="preview-note" style="margin: 8px 0 0;">Bei Fehlern schickt die App automatisch technische Infos mit (Gerät, Browser, Ansicht, letzte Fehlermeldungen) – keine Einträge oder Gesundheitsdaten.</p>
+        </details>
+
         <!-- Info, Datenschutz, Konto -->
         <details class="card" id="account-card">
             <summary><h3>Info &amp; Konto</h3></summary>
@@ -1221,6 +1238,16 @@
 <script src="i18n.js"></script>
 <script src="vendor/supabase-2.45.4.js"></script>
 <script>
+    // Für Fehlerberichte: Version und die letzten Fehlermeldungen (nur Technik, keine Inhalte)
+    const APP_VERSION = '2026-11-26';
+    const recentErrors = [];
+    const noteError = (msg) => {
+        recentErrors.push({ at: new Date().toISOString(), msg: String(msg).slice(0, 300) });
+        if (recentErrors.length > 8) recentErrors.shift();
+    };
+    window.addEventListener('error', e => noteError(`${e.message} @ ${(e.filename || '').split('/').pop()}:${e.lineno}`));
+    window.addEventListener('unhandledrejection', e => noteError('promise: ' + (e.reason?.message || e.reason)));
+
     const SUPABASE_URL = 'https://tzqzgcnacpkzdyvahioo.supabase.co';
     const SUPABASE_ANON_KEY = 'sb_publishable_2SCcL0L46jUyUBmOVm5XCg_JuXG906M';
     const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -1655,6 +1682,46 @@
             btn.disabled = false;
             btn.textContent = 'Konto und alle Daten löschen…';
         }
+    });
+
+    // ---------- Feedback: Fehler melden & Ideen (Tabelle "feedback", Auswertung im Supabase-Dashboard) ----------
+    $('feedback-kind').addEventListener('click', (event) => {
+        const chip = event.target.closest('.chip');
+        if (!chip) return;
+        $('feedback-kind').querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c === chip));
+        $('feedback-text').placeholder = chip.dataset.v === 'bug'
+            ? 'Was ist passiert? Was hast du davor gemacht?'
+            : 'Was wünschst du dir?';
+    });
+    $('feedback-send-btn').addEventListener('click', async () => {
+        if (!currentSession) return;
+        const message = $('feedback-text').value.trim();
+        if (message.length < 3) {
+            $('feedback-text').focus();
+            return showToast('Bitte kurz beschreiben, worum es geht.');
+        }
+        const kind = $('feedback-kind').querySelector('.chip.active')?.dataset.v || 'bug';
+        const context = {
+            version: APP_VERSION, lang: APP_LANG, view: currentView,
+            ua: navigator.userAgent.slice(0, 300),
+            screen: `${window.innerWidth}x${window.innerHeight}`,
+            installed: window.matchMedia('(display-mode: standalone)').matches,
+            online: navigator.onLine, ai: aiMode,
+            errors: kind === 'bug' ? recentErrors.slice(-8) : []
+        };
+        const btn = $('feedback-send-btn');
+        btn.disabled = true;
+        const { error } = await supabase.from('feedback').insert({
+            user_id: currentSession.user.id, kind, message: message.slice(0, 2000),
+            contact_ok: $('feedback-contact').checked, context
+        });
+        btn.disabled = false;
+        if (error) {
+            return alert('Nicht gesendet: ' + (isNetworkError(error) ? 'keine Internetverbindung.' : error.message));
+        }
+        $('feedback-text').value = '';
+        $('feedback-contact').checked = false;
+        showToast(kind === 'bug' ? 'Danke! Der Fehler ist gemeldet.' : 'Danke für die Idee!');
     });
 
     // Sprache umschalten: speichern und neu laden (die Texte werden beim Laden übersetzt)
